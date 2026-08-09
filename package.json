@@ -1,0 +1,14 @@
+{
+  "name": "techclass.cevdetabbas.com",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TechClass schedule studio with auth, SQLite, and a targeted classroom setup assistant.",
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "node --watch --no-warnings server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

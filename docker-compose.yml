@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    image: techclass.cevdetabbas.com:latest
+    container_name: techclass.cevdetabbas.com
+    ports:
+      - "${WSL_IP:?Set WSL_IP or run ./start-techclass-wsl.sh}:2930:2930"
+    environment:
+      NODE_ENV: production
+      PORT: "2930"
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
