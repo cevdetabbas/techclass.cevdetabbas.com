@@ -1,9 +1,18 @@
 const app = document.querySelector("#app");
 
+function readSidebarPreference() {
+  try {
+    return localStorage.getItem("techclass_sidebar") === "collapsed";
+  } catch {
+    return false;
+  }
+}
+
 const state = {
   user: null,
   schedule: null,
   view: "schedule",
+  sidebarCollapsed: readSidebarPreference(),
   authMode: null,
   authError: "",
   carousel: 0,
@@ -25,6 +34,12 @@ const SECTION_IMAGES = [
   "/assets/cls/logout4.png",
   "/assets/cls/abc.jpg",
   "/assets/cls/pbs.png",
+];
+
+const navItems = [
+  { view: "schedule", label: "Schedule", short: "S" },
+  { view: "display", label: "Display", short: "D" },
+  { view: "assistant", label: "Assistant", short: "A" },
 ];
 
 const slides = [
@@ -271,12 +286,14 @@ function renderApp() {
   const schedule = state.schedule;
   const block = displayBlock();
   const next = nextBlock(block);
+  const collapsed = state.sidebarCollapsed;
   app.innerHTML = `
-    <div class="app-shell">
-      <aside class="sidebar">
+    <div class="app-shell ${collapsed ? "sidebar-collapsed" : ""}">
+      <aside class="sidebar ${collapsed ? "collapsed" : ""}">
+        <button class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${collapsed ? "Expand sidebar" : "Collapse sidebar"}" title="${collapsed ? "Expand sidebar" : "Collapse sidebar"}">${collapsed ? "&gt;" : "&lt;"}</button>
         <div class="brand"><div class="brand-mark">T</div><span>TechClass</span></div>
         <nav class="side-nav">
-          ${["schedule", "display", "assistant"].map((view) => `<button class="${state.view === view ? "active" : ""}" data-action="view" data-view="${view}">${view[0].toUpperCase() + view.slice(1)}</button>`).join("")}
+          ${navItems.map((item) => `<button class="${state.view === item.view ? "active" : ""}" data-action="view" data-view="${item.view}" aria-label="${item.label}" title="${item.label}"><span class="nav-full">${item.label}</span><span class="nav-short">${item.short}</span></button>`).join("")}
         </nav>
       </aside>
       <main class="main-area">
@@ -591,6 +608,15 @@ app.addEventListener("click", async (event) => {
   if (action === "slide") {
     state.carousel = Number(button.dataset.index);
     renderLanding();
+  }
+  if (action === "toggle-sidebar") {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    try {
+      localStorage.setItem("techclass_sidebar", state.sidebarCollapsed ? "collapsed" : "expanded");
+    } catch {
+      // Ignore storage failures in private or locked-down browsing contexts.
+    }
+    renderApp();
   }
   if (action === "view") {
     state.view = button.dataset.view;
