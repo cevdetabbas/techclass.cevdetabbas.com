@@ -20,6 +20,10 @@ const state = {
   simStartedAt: null,
   simStartIndex: 0,
   flashOffsetSeconds: 0,
+  demoSessions: [],
+  demoRunning: false,
+  demoStartedAt: null,
+  demoElapsedSeconds: 0,
   assistantMessages: [],
   draftPatch: null,
 };
@@ -36,9 +40,55 @@ const SECTION_IMAGES = [
   "/assets/cls/pbs.png",
 ];
 
+function createDemoSession(label, minutes, imageUrl = randomSectionImage()) {
+  return {
+    id: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label,
+    minutes,
+    imageUrl,
+  };
+}
+
+function createDefaultDemoSessions() {
+  return [
+    createDemoSession("Login", 3, SECTION_IMAGES[0]),
+    createDemoSession("Learning", 30, SECTION_IMAGES[1]),
+    createDemoSession("Typing", 10, SECTION_IMAGES[2]),
+    createDemoSession("Logout", 2, SECTION_IMAGES[4]),
+  ];
+}
+
+function readDemoSessions() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("techclass_demo_sessions") || "null");
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return null;
+    }
+    return parsed.slice(0, 12).map((session, index) => ({
+      id: String(session.id || `demo-stored-${index}`).slice(0, 60),
+      label: String(session.label || `Session ${index + 1}`).trim().slice(0, 50) || `Session ${index + 1}`,
+      minutes: Math.max(1, Math.min(240, Math.round(Number(session.minutes || 5)))),
+      imageUrl: String(session.imageUrl || SECTION_IMAGES[index % SECTION_IMAGES.length]),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function writeDemoSessions() {
+  try {
+    localStorage.setItem("techclass_demo_sessions", JSON.stringify(state.demoSessions));
+  } catch {
+    // Demo edits still work for the current page even when storage is unavailable.
+  }
+}
+
+state.demoSessions = readDemoSessions() || createDefaultDemoSessions();
+
 const navItems = [
   { view: "schedule", label: "Schedule", short: "S" },
   { view: "display", label: "Display", short: "D" },
+  { view: "demo", label: "Demo", short: "M" },
   { view: "assistant", label: "Assistant", short: "A" },
 ];
 
@@ -309,6 +359,7 @@ function renderApp() {
         </header>
         ${state.view === "schedule" ? renderScheduleView() : ""}
         ${state.view === "display" ? renderDisplayView(block, next) : ""}
+        ${state.view === "demo" ? renderDemoView() : ""}
         ${state.view === "assistant" ? renderAssistantView() : ""}
       </main>
     </div>
@@ -479,6 +530,114 @@ function renderSessionCard(segment, index, display) {
   `;
 }
 
+function demoTotalSeconds() {
+  return state.demoSessions.reduce((sum, session) => sum + Math.max(1, Number(session.minutes || 1)) * 60, 0);
+}
+
+function currentDemoElapsedSeconds() {
+  const base = Math.max(0, Number(state.demoElapsedSeconds || 0));
+  if (!state.demoRunning || !state.demoStartedAt) {
+    return base;
+  }
+  return base + Math.max(0, Math.floor((Date.now() - state.demoStartedAt) / 1000));
+}
+
+function clampDemoElapsed() {
+  state.demoElapsedSeconds = Math.min(currentDemoElapsedSeconds(), demoTotalSeconds());
+  state.demoStartedAt = state.demoRunning ? Date.now() : null;
+}
+
+function demoDisplayState() {
+  const sessions = state.demoSessions;
+  const total = demoTotalSeconds();
+  const elapsed = Math.min(currentDemoElapsedSeconds(), total);
+  let cursor = 0;
+  let activeIndex = -1;
+  sessions.forEach((session, index) => {
+    const duration = Math.max(1, Number(session.minutes || 1)) * 60;
+    if (elapsed >= cursor && elapsed < cursor + duration) {
+      activeIndex = index;
+    }
+    cursor += duration;
+  });
+  const status = elapsed >= total
+    ? "DEMO COMPLETE"
+    : state.demoRunning
+      ? "DEMO RUNNING"
+      : elapsed > 0
+        ? "DEMO PAUSED"
+        : "DEMO READY";
+  return { sessions, total, elapsed, activeIndex, overallTimer: formatSeconds(total - elapsed), status };
+}
+
+function renderDemoView() {
+  const theme = state.schedule.theme.background;
+  const demo = demoDisplayState();
+  let cursor = 0;
+  return `
+    <section class="panel preview cls-display demo-display ${escapeHtml(theme)} mode-sim">
+      <div class="display-head demo-head">
+        <div>
+          <div class="eyebrow">Demo draft</div>
+          <h2>Four-session flow</h2>
+          <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
+        </div>
+        <div class="demo-toolbar">
+          <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
+          <div class="demo-controls">
+            <button class="demo-control ${state.demoRunning ? "active" : ""}" data-action="demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
+            <button class="demo-control" data-action="demo-stop" aria-label="Stop demo" title="Stop"><span class="stop-icon"></span></button>
+            <button class="demo-add" data-action="demo-add-session" aria-label="Add session" title="Add session">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="session-grid demo-session-grid count-${Math.max(1, demo.sessions.length)}">
+        ${demo.sessions.map((session, index) => {
+          const duration = Math.max(1, Number(session.minutes || 1)) * 60;
+          const done = demo.elapsed >= cursor + duration;
+          const active = index === demo.activeIndex && demo.elapsed < demo.total;
+          const progress = active ? Math.max(0, Math.min(1, (demo.elapsed - cursor) / duration)) : done ? 1 : 0;
+          const ringOffset = Math.round(RING_CIRCUMFERENCE - progress * RING_CIRCUMFERENCE);
+          const timer = active ? formatSeconds(cursor + duration - demo.elapsed) : done ? "DONE" : `${String(session.minutes).padStart(2, "0")}:00`;
+          cursor += duration;
+          return renderDemoSessionCard(session, index, { active, done, timer, ringOffset });
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDemoSessionCard(session, index, display) {
+  const canDelete = state.demoSessions.length > 1;
+  return `
+    <div class="session-card demo-session-card ${display.active ? "active" : ""} ${display.done ? "done" : ""}" data-demo-session-id="${escapeHtml(session.id)}">
+      <button class="demo-delete" data-action="demo-delete-session" aria-label="Delete session" title="Delete session" ${canDelete ? "" : "disabled"}>x</button>
+      <div class="session-info">
+        Session ${index + 1} -
+        <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-demo-field="minutes" aria-label="Session minutes">
+        Min
+      </div>
+      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-demo-field="label" aria-label="Session name">
+      <div class="circle-wrap">
+        <svg class="ring-svg" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="demoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+          <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
+        </svg>
+        <div class="coin ${display.active ? "spinning" : ""}">
+          <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+          <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+        </div>
+      </div>
+      <div class="time-left">${escapeHtml(display.timer)}</div>
+    </div>
+  `;
+}
+
 function renderAssistantView() {
   return `
     <div class="grid">
@@ -563,6 +722,33 @@ function updateSegment(blockId, segmentId, field, value) {
   });
 }
 
+function updateDemoSession(sessionId, field, value) {
+  let changed = false;
+  state.demoSessions = state.demoSessions.map((session) => {
+    if (session.id !== sessionId) {
+      return session;
+    }
+    if (field === "minutes") {
+      const minutes = Math.max(1, Math.min(240, Math.round(Number(value || 0))));
+      if (!Number.isFinite(minutes)) {
+        return session;
+      }
+      changed = true;
+      return { ...session, minutes };
+    }
+    changed = true;
+    return { ...session, label: String(value || "").slice(0, 50) };
+  });
+  if (changed) {
+    clampDemoElapsed();
+    writeDemoSessions();
+  }
+}
+
+function demoSessionById(sessionId) {
+  return state.demoSessions.find((session) => session.id === sessionId) || null;
+}
+
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
   const authError = params.get("authError");
@@ -621,6 +807,37 @@ app.addEventListener("click", async (event) => {
   if (action === "view") {
     state.view = button.dataset.view;
     renderApp();
+  }
+  if (action === "demo-play") {
+    const total = demoTotalSeconds();
+    const elapsed = currentDemoElapsedSeconds();
+    state.demoElapsedSeconds = elapsed >= total ? 0 : elapsed;
+    state.demoStartedAt = Date.now();
+    state.demoRunning = true;
+    renderApp();
+  }
+  if (action === "demo-stop") {
+    state.demoElapsedSeconds = currentDemoElapsedSeconds();
+    state.demoStartedAt = null;
+    state.demoRunning = false;
+    renderApp();
+  }
+  if (action === "demo-add-session") {
+    clampDemoElapsed();
+    const index = state.demoSessions.length;
+    state.demoSessions.push(createDemoSession(`Session ${index + 1}`, 5, SECTION_IMAGES[index % SECTION_IMAGES.length]));
+    writeDemoSessions();
+    renderApp();
+  }
+  if (action === "demo-delete-session") {
+    const card = button.closest("[data-demo-session-id]");
+    if (card && state.demoSessions.length > 1) {
+      clampDemoElapsed();
+      state.demoSessions = state.demoSessions.filter((session) => session.id !== card.dataset.demoSessionId);
+      clampDemoElapsed();
+      writeDemoSessions();
+      renderApp();
+    }
   }
   if (action === "logout") {
     await api("/api/auth/logout", { method: "POST" });
@@ -744,10 +961,25 @@ app.addEventListener("input", (event) => {
     const row = input.closest("[data-segment-id]");
     updateSegment(row.dataset.blockId, row.dataset.segmentId, input.dataset.segmentField, input.value);
   }
+  if (input.matches("[data-demo-field]")) {
+    const row = input.closest("[data-demo-session-id]");
+    if (row) {
+      updateDemoSession(row.dataset.demoSessionId, input.dataset.demoField, input.value);
+    }
+  }
 });
 
 app.addEventListener("change", (event) => {
   const input = event.target;
+  if (input.matches("[data-demo-field]")) {
+    const row = input.closest("[data-demo-session-id]");
+    const session = row ? demoSessionById(row.dataset.demoSessionId) : null;
+    if (session && input.dataset.demoField === "minutes") {
+      input.value = session.minutes;
+    }
+    renderApp();
+    return;
+  }
   if (input.matches("select[data-action='select-block']")) {
     state.selectedBlockId = input.value;
     renderApp();
@@ -813,6 +1045,21 @@ setInterval(() => {
     renderApp();
   }
 }, 30000);
+
+setInterval(() => {
+  if (!state.user || state.view !== "demo" || !state.demoRunning) {
+    return;
+  }
+  if (document.activeElement?.matches("[data-demo-field]")) {
+    return;
+  }
+  if (currentDemoElapsedSeconds() >= demoTotalSeconds()) {
+    state.demoElapsedSeconds = demoTotalSeconds();
+    state.demoStartedAt = null;
+    state.demoRunning = false;
+  }
+  renderApp();
+}, 1000);
 
 setInterval(() => {
   if (state.user && document.visibilityState === "visible") {
