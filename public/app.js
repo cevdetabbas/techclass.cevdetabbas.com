@@ -45,12 +45,30 @@ const SECTION_IMAGES = [
   "/assets/cls/pbs.png",
 ];
 
-function createDemoSession(label, minutes, imageUrl = randomSectionImage()) {
+function defaultAnnouncement(label, minutes) {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("login")) {
+    return "Please log in to your accounts.";
+  }
+  if (normalized.includes("learning")) {
+    return `Learning session started. This session will take ${minutes} minutes.`;
+  }
+  if (normalized.includes("typing")) {
+    return `Typing session started. This session will take ${minutes} minutes.`;
+  }
+  if (normalized.includes("logout")) {
+    return "The class is over. Please log out and prepare to leave.";
+  }
+  return `${label} session started. This session will take ${minutes} minutes.`;
+}
+
+function createDemoSession(label, minutes, imageUrl = randomSectionImage(), announcement = defaultAnnouncement(label, minutes)) {
   return {
     id: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     label,
     minutes,
     imageUrl,
+    announcement,
   };
 }
 
@@ -74,6 +92,7 @@ function readDemoSessions() {
       label: String(session.label || `Session ${index + 1}`).trim().slice(0, 50) || `Session ${index + 1}`,
       minutes: Math.max(1, Math.min(240, Math.round(Number(session.minutes || 5)))),
       imageUrl: String(session.imageUrl || SECTION_IMAGES[index % SECTION_IMAGES.length]),
+      announcement: String(session.announcement || defaultAnnouncement(session.label || `Session ${index + 1}`, session.minutes || 5)).slice(0, 600),
     }));
   } catch {
     return null;
@@ -463,27 +482,36 @@ function renderPublicDemoSessionCard(session, index, display) {
   return `
     <div class="session-card demo-session-card public-demo-session-card ${display.active ? "active" : ""} ${display.done ? "done" : ""}" data-public-demo-session-id="${escapeHtml(session.id)}">
       <button class="demo-delete" data-action="public-demo-delete-session" aria-label="Delete session" title="Delete session" ${canDelete ? "" : "disabled"}>x</button>
-      <div class="session-info">
-        Session ${index + 1} -
-        <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-public-demo-field="minutes" aria-label="Session minutes">
-        Min
-      </div>
-      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-public-demo-field="label" aria-label="Session name">
-      <div class="circle-wrap">
-        <svg class="ring-svg" viewBox="0 0 100 100">
-          <defs>
-            <linearGradient id="publicDemoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
-            </linearGradient>
-          </defs>
-          <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
-          <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
-        </svg>
-        <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
-          <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
-          <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+      <div class="demo-meta-wrap">
+        <div class="session-info">
+          Session ${index + 1} -
+          <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-public-demo-field="minutes" aria-label="Session minutes">
+          Min
+        </div>
+        <div class="announcement-popover">
+          <label>Announcement</label>
+          <textarea data-public-demo-field="announcement" aria-label="Session announcement">${escapeHtml(session.announcement || "")}</textarea>
         </div>
       </div>
+      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-public-demo-field="label" aria-label="Session name">
+      <label class="demo-image-upload" aria-label="Upload session image" title="Upload image">
+        <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" data-public-demo-image-upload>
+        <div class="circle-wrap">
+          <svg class="ring-svg" viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="publicDemoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+            <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
+          </svg>
+          <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
+            <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+            <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+          </div>
+        </div>
+      </label>
       <div class="time-left">${escapeHtml(display.timer)}</div>
     </div>
   `;
@@ -797,27 +825,36 @@ function renderDemoSessionCard(session, index, display) {
   return `
     <div class="session-card demo-session-card ${display.active ? "active" : ""} ${display.done ? "done" : ""}" data-demo-session-id="${escapeHtml(session.id)}">
       <button class="demo-delete" data-action="demo-delete-session" aria-label="Delete session" title="Delete session" ${canDelete ? "" : "disabled"}>x</button>
-      <div class="session-info">
-        Session ${index + 1} -
-        <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-demo-field="minutes" aria-label="Session minutes">
-        Min
-      </div>
-      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-demo-field="label" aria-label="Session name">
-      <div class="circle-wrap">
-        <svg class="ring-svg" viewBox="0 0 100 100">
-          <defs>
-            <linearGradient id="demoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
-            </linearGradient>
-          </defs>
-          <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
-          <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
-        </svg>
-        <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
-          <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
-          <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+      <div class="demo-meta-wrap">
+        <div class="session-info">
+          Session ${index + 1} -
+          <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-demo-field="minutes" aria-label="Session minutes">
+          Min
+        </div>
+        <div class="announcement-popover">
+          <label>Announcement</label>
+          <textarea data-demo-field="announcement" aria-label="Session announcement">${escapeHtml(session.announcement || "")}</textarea>
         </div>
       </div>
+      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-demo-field="label" aria-label="Session name">
+      <label class="demo-image-upload" aria-label="Upload session image" title="Upload image">
+        <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" data-demo-image-upload>
+        <div class="circle-wrap">
+          <svg class="ring-svg" viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="demoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+            <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
+          </svg>
+          <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
+            <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+            <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+          </div>
+        </div>
+      </label>
       <div class="time-left">${escapeHtml(display.timer)}</div>
     </div>
   `;
@@ -921,6 +958,14 @@ function updateDemoSession(sessionId, field, value) {
       changed = true;
       return { ...session, minutes };
     }
+    if (field === "announcement") {
+      changed = true;
+      return { ...session, announcement: String(value || "").slice(0, 600) };
+    }
+    if (field === "imageUrl") {
+      changed = true;
+      return { ...session, imageUrl: String(value || "") };
+    }
     changed = true;
     return { ...session, label: String(value || "").slice(0, 50) };
   });
@@ -943,6 +988,12 @@ function updatePublicDemoSession(sessionId, field, value) {
       const minutes = Math.max(1, Math.min(240, Math.round(Number(value || 0))));
       return Number.isFinite(minutes) ? { ...session, minutes } : session;
     }
+    if (field === "announcement") {
+      return { ...session, announcement: String(value || "").slice(0, 600) };
+    }
+    if (field === "imageUrl") {
+      return { ...session, imageUrl: String(value || "") };
+    }
     return { ...session, label: String(value || "").slice(0, 50) };
   });
   clampPublicDemoElapsed();
@@ -950,6 +1001,26 @@ function updatePublicDemoSession(sessionId, field, value) {
 
 function publicDemoSessionById(sessionId) {
   return state.publicDemoSessions.find((session) => session.id === sessionId) || null;
+}
+
+function readDemoImageFile(file, onLoad) {
+  if (!file) {
+    return false;
+  }
+  const supportedType = /^image\/(png|jpe?g|webp|gif)$/i.test(file.type || "");
+  const supportedName = /\.(png|jpe?g|webp|gif)$/i.test(file.name || "");
+  if (!supportedType && !supportedName) {
+    alert("Please choose a JPG, JPEG, PNG, WEBP, or GIF image.");
+    return false;
+  }
+  if (file.size > 1500 * 1024) {
+    alert("Please choose an image under 1.5 MB.");
+    return false;
+  }
+  const reader = new FileReader();
+  reader.onload = () => onLoad(String(reader.result || ""));
+  reader.readAsDataURL(file);
+  return true;
 }
 
 async function bootstrap() {
@@ -1241,6 +1312,30 @@ app.addEventListener("input", (event) => {
 
 app.addEventListener("change", (event) => {
   const input = event.target;
+  if (input.matches("[data-public-demo-image-upload]")) {
+    const row = input.closest("[data-public-demo-session-id]");
+    const file = input.files?.[0];
+    if (!row || !file) {
+      return;
+    }
+    readDemoImageFile(file, (imageUrl) => {
+      updatePublicDemoSession(row.dataset.publicDemoSessionId, "imageUrl", imageUrl);
+      renderPublicDemoPage();
+    });
+    return;
+  }
+  if (input.matches("[data-demo-image-upload]")) {
+    const row = input.closest("[data-demo-session-id]");
+    const file = input.files?.[0];
+    if (!row || !file) {
+      return;
+    }
+    readDemoImageFile(file, (imageUrl) => {
+      updateDemoSession(row.dataset.demoSessionId, "imageUrl", imageUrl);
+      renderApp();
+    });
+    return;
+  }
   if (input.matches("[data-public-demo-field]")) {
     const row = input.closest("[data-public-demo-session-id]");
     const session = row ? publicDemoSessionById(row.dataset.publicDemoSessionId) : null;
