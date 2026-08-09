@@ -510,6 +510,20 @@ async function saveSchedule() {
   renderApp();
 }
 
+async function heartbeat() {
+  if (!state.user) {
+    return;
+  }
+  try {
+    await api("/api/session/heartbeat", { method: "POST" });
+  } catch {
+    state.user = null;
+    state.schedule = null;
+    state.view = "schedule";
+    renderLanding();
+  }
+}
+
 function updateBlock(blockId, field, value) {
   state.schedule.blocks = state.schedule.blocks.map((block) => {
     if (block.id !== blockId) {
@@ -772,5 +786,19 @@ setInterval(() => {
     renderApp();
   }
 }, 30000);
+
+setInterval(() => {
+  if (state.user && document.visibilityState === "visible") {
+    heartbeat();
+  }
+}, 5 * 60 * 1000);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    heartbeat();
+  }
+});
+
+window.addEventListener("focus", heartbeat);
 
 bootstrap();

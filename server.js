@@ -14,6 +14,7 @@ import {
   getUserByEmail,
   getUserById,
   initDb,
+  refreshSession,
   saveAssistantMessage,
   saveSchedule,
 } from "./src/db.js";
@@ -37,7 +38,7 @@ const publicDir = path.join(__dirname, "public");
 const PORT = Number(process.env.PORT || 2930);
 const SESSION_COOKIE = "techclass_session";
 const OAUTH_STATE_COOKIE = "techclass_oauth_state";
-const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7;
+const SESSION_SECONDS = 60 * 60 * 8;
 const OAUTH_STATE_SECONDS = 60 * 10;
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
 
@@ -74,7 +75,7 @@ function setSessionCookie(token) {
     "HttpOnly",
     "Path=/",
     "SameSite=Lax",
-    `Max-Age=${ONE_WEEK_SECONDS}`,
+    `Max-Age=${SESSION_SECONDS}`,
   ];
   if (process.env.COOKIE_SECURE === "true") {
     parts.push("Secure");
@@ -188,6 +189,11 @@ function getAuthenticatedUser(req, res) {
   return { user, token };
 }
 
+function refreshAuth(auth) {
+  refreshSession(auth.token, SESSION_SECONDS);
+  return { "Set-Cookie": setSessionCookie(auth.token) };
+}
+
 async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/health") {
     sendJson(res, 200, { ok: true, service: "techclass", port: PORT });
@@ -230,7 +236,7 @@ async function handleApi(req, res, pathname) {
       const profile = await readGoogleProfile(tokens.access_token);
       const user = createOrUpdateGoogleUser(profile);
       const sessionToken = createRawSessionToken();
-      createSession({ userId: user.id, token: sessionToken, maxAgeSeconds: ONE_WEEK_SECONDS });
+      createSession({ userId: user.id, token: sessionToken, maxAgeSeconds: SESSION_SECONDS });
       sendRedirect(res, "/", {
         "Set-Cookie": [setSessionCookie(sessionToken), clearOAuthStateCookie()],
       });
@@ -264,7 +270,7 @@ async function handleApi(req, res, pathname) {
 
       const user = createUser({ name, email, passwordHash: hashPassword(password) });
       const token = createRawSessionToken();
-      createSession({ userId: user.id, token, maxAgeSeconds: ONE_WEEK_SECONDS });
+      createSession({ userId: user.id, token, maxAgeSeconds: SESSION_SECONDS });
       sendJson(res, 201, { user: publicUser(user), schedule: getSchedule(user.id) }, { "Set-Cookie": setSessionCookie(token) });
     } catch (error) {
       console.error(error);
@@ -284,7 +290,7 @@ async function handleApi(req, res, pathname) {
       }
 
       const token = createRawSessionToken();
-      createSession({ userId: user.id, token, maxAgeSeconds: ONE_WEEK_SECONDS });
+      createSession({ userId: user.id, token, maxAgeSeconds: SESSION_SECONDS });
       sendJson(res, 200, { user: publicUser(user), schedule: getSchedule(user.id) }, { "Set-Cookie": setSessionCookie(token) });
     } catch (error) {
       console.error(error);
@@ -300,7 +306,12 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === "GET" && pathname === "/api/me") {
-      sendJson(res, 200, { user: publicUser(auth.user), schedule: getSchedule(auth.user.id) });
+      sendJson(res, 200, { user: publicUser(auth.user), schedule: getSchedule(auth.user.id) }, refreshAuth(auth));
+      return true;
+    }
+
+    if (req.method === "POST" && pathname === "/api/session/heartbeat") {
+      sendJson(res, 200, { ok: true, expiresInSeconds: SESSION_SECONDS }, refreshAuth(auth));
       return true;
     }
 
@@ -311,7 +322,7 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === "GET" && pathname === "/api/schedule") {
-      sendJson(res, 200, { schedule: getSchedule(auth.user.id) });
+      sendJson(res, 200, { schedule: getSchedule(auth.user.id) }, refreshAuth(auth));
       return true;
     }
 
@@ -320,7 +331,7 @@ async function handleApi(req, res, pathname) {
         const body = await readBody(req);
         const schedule = normalizeSchedule(body?.schedule);
         saveSchedule(auth.user.id, schedule);
-        sendJson(res, 200, { schedule });
+        sendJson(res, 200, { schedule }, refreshAuth(auth));
       } catch (error) {
         sendJson(res, 400, { error: error.message || "Invalid schedule." });
       }
@@ -328,7 +339,7 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === "GET" && pathname === "/api/assistant/messages") {
-      sendJson(res, 200, { messages: getAssistantMessages(auth.user.id) });
+      sendJson(res, 200, { messages: getAssistantMessages(auth.user.id) }, refreshAuth(auth));
       return true;
     }
 
@@ -344,7 +355,7 @@ async function handleApi(req, res, pathname) {
         const response = buildAssistantResponse(message, schedule);
         saveAssistantMessage(auth.user.id, "user", message);
         saveAssistantMessage(auth.user.id, "assistant", response.reply);
-        sendJson(res, 200, response);
+        sendJson(res, 200, response, refreshAuth(auth));
       } catch (error) {
         console.error(error);
         sendJson(res, 500, { error: "Assistant could not process that request." });

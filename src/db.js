@@ -163,6 +163,13 @@ export function createSession({ userId, token, maxAgeSeconds }) {
     .run(hashSessionToken(token), userId, expiresAt, createdAt);
 }
 
+export function refreshSession(token, maxAgeSeconds) {
+  const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000).toISOString();
+  database()
+    .prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?")
+    .run(expiresAt, hashSessionToken(token));
+}
+
 export function getSessionByToken(token) {
   const tokenHash = hashSessionToken(token);
   const row = database()

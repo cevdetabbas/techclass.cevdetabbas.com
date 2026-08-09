@@ -6,6 +6,7 @@ It includes:
 
 - A launch landing page with sign in and sign up.
 - User accounts with secure password hashing, Google sign-in, and cookie sessions.
+- 8-hour idle sessions that stay alive while the app is actively open.
 - SQLite persistence for users, schedules, sections, themes, and assistant messages.
 - A schedule editor for bell schedules and per-class section labels.
 - CLS-style class sections with editable names, minutes, random images, and image upload.
