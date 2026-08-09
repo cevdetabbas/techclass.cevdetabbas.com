@@ -97,45 +97,32 @@ function renderLanding() {
       </header>
       <main class="hero">
         <div class="hero-backdrop"></div>
-        <section class="hero-copy">
-          <div class="eyebrow">Classroom schedule studio</div>
-          <h1>TechClass</h1>
-          <p>Design bell schedules, split class time into named sections, and launch a live animated classroom display from one teacher-owned dashboard.</p>
-          <div class="hero-cta">
-            <button class="btn blue" data-action="open-auth" data-mode="signup">Create your studio</button>
-            <button class="btn" data-action="open-auth" data-mode="login">I already have one</button>
-          </div>
-        </section>
-        <aside class="hero-product" aria-label="TechClass preview">
-          <div class="browser-dots"><span></span><span></span><span></span></div>
-          <div class="product-board">
-            <div class="mini-agenda">
-              <div class="mini-title">Today</div>
-              <div class="agenda-line"><div class="agenda-time">8:00</div><div class="agenda-pill">Arrival</div></div>
-              <div class="agenda-line"><div class="agenda-time">8:15</div><div class="agenda-pill">Digital Lab</div></div>
-              <div class="agenda-line"><div class="agenda-time">9:05</div><div class="agenda-pill">Project Sprint</div></div>
+        <div class="hero-layout">
+          <section class="hero-copy">
+            <div class="eyebrow">Classroom schedule studio</div>
+            <h1>TechClass</h1>
+            <p>TechClass helps teachers turn a rough bell schedule into a clean classroom dashboard: daily blocks, section labels, visual themes, and a focused assistant that understands pasted schedule text.</p>
+            <div class="hero-cta">
+              <button class="btn blue" data-action="open-auth" data-mode="signup">Create your studio</button>
+              <button class="btn" data-action="open-auth" data-mode="login">I already have one</button>
             </div>
-            <div class="mini-live">
-              <div class="mini-title">Live display</div>
-              <div class="live-circle"><span>12</span></div>
-              <div class="live-caption">Guided practice</div>
+          </section>
+          <section class="showcase hero-showcase" aria-label="TechClass preview carousel">
+            <div class="browser-dots"><span></span><span></span><span></span></div>
+            <div class="slide active">
+              <div class="slide-art ${slide.key}">
+                <img src="${escapeHtml(slide.image)}" alt="${escapeHtml(slide.title)}">
+              </div>
+              <div class="slide-copy">
+                <h2>${escapeHtml(slide.title)}</h2>
+                <p>${escapeHtml(slide.copy)}</p>
+              </div>
             </div>
-          </div>
-        </aside>
-        <section class="showcase">
-          <div class="slide active">
-            <div class="slide-art ${slide.key}">
-              <img src="${escapeHtml(slide.image)}" alt="${escapeHtml(slide.title)}">
+            <div class="dots">
+              ${slides.map((item, index) => `<button class="dot ${index === state.carousel ? "active" : ""}" aria-label="${escapeHtml(item.title)}" data-action="slide" data-index="${index}"></button>`).join("")}
             </div>
-            <div class="slide-copy">
-              <h2>${escapeHtml(slide.title)}</h2>
-              <p>${escapeHtml(slide.copy)}</p>
-            </div>
-          </div>
-          <div class="dots">
-            ${slides.map((item, index) => `<button class="dot ${index === state.carousel ? "active" : ""}" aria-label="${escapeHtml(item.title)}" data-action="slide" data-index="${index}"></button>`).join("")}
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
       ${state.authMode ? renderAuthPanel() : ""}
     </div>
