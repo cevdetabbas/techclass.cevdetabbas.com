@@ -8,9 +8,24 @@ const state = {
   authError: "",
   carousel: 0,
   selectedBlockId: null,
+  simStartedAt: null,
+  simStartIndex: 0,
+  flashOffsetSeconds: 0,
   assistantMessages: [],
   draftPatch: null,
 };
+
+const MAX_SECTIONS = 5;
+const RING_CIRCUMFERENCE = 283;
+const SECTION_IMAGES = [
+  "/assets/cls/login.png",
+  "/assets/cls/learning.png",
+  "/assets/cls/typing.png",
+  "/assets/cls/nitrotype.jpg",
+  "/assets/cls/logout4.png",
+  "/assets/cls/abc.jpg",
+  "/assets/cls/pbs.png",
+];
 
 const slides = [
   {
@@ -63,8 +78,8 @@ function setSchedule(schedule) {
   }
 }
 
-function activeBlock() {
-  const now = new Date();
+function activeBlock(at = new Date()) {
+  const now = at;
   const current = now.getHours() * 60 + now.getMinutes();
   return state.schedule?.blocks.find((block) => {
     const [sh, sm] = block.start.split(":").map(Number);
@@ -83,6 +98,108 @@ function minutesBetween(start, end) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
   return Math.max(1, eh * 60 + em - (sh * 60 + sm));
+}
+
+function timeToSeconds(value) {
+  const [hours, minutes] = String(value || "00:00").split(":").map(Number);
+  return (hours || 0) * 3600 + (minutes || 0) * 60;
+}
+
+function formatSeconds(seconds) {
+  if (seconds === null) {
+    return "READY";
+  }
+  if (seconds <= 0) {
+    return "DONE";
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function displayMode() {
+  return state.schedule?.theme?.mode || "real";
+}
+
+function displayNow() {
+  return new Date(Date.now() + (displayMode() === "flash" ? state.flashOffsetSeconds * 1000 : 0));
+}
+
+function randomSectionImage() {
+  return SECTION_IMAGES[Math.floor(Math.random() * SECTION_IMAGES.length)];
+}
+
+function clsSegmentsForBlock(block) {
+  const duration = minutesBetween(block.start, block.end);
+  if (duration <= 1) {
+    return [{ id: `seg-${Date.now()}-0`, label: "Login", minutes: 1, color: block.color, imageUrl: SECTION_IMAGES[0] }];
+  }
+  if (duration <= 6) {
+    return [
+      { id: `seg-${Date.now()}-0`, label: "Login", minutes: Math.max(1, Math.floor(duration / 2)), color: block.color, imageUrl: SECTION_IMAGES[0] },
+      { id: `seg-${Date.now()}-1`, label: "Logout", minutes: Math.max(1, Math.ceil(duration / 2)), color: block.color, imageUrl: SECTION_IMAGES[4] },
+    ];
+  }
+  const login = Math.min(3, Math.max(1, Math.round(duration * 0.08)));
+  const logout = Math.min(2, Math.max(1, Math.round(duration * 0.06)));
+  const typing = Math.min(10, Math.max(2, Math.round(duration * 0.22)));
+  const learning = Math.max(1, duration - login - typing - logout);
+  return [
+    { id: `seg-${Date.now()}-0`, label: "Login", minutes: login, color: block.color, imageUrl: SECTION_IMAGES[0] },
+    { id: `seg-${Date.now()}-1`, label: "Learning", minutes: learning, color: block.color, imageUrl: SECTION_IMAGES[1] },
+    { id: `seg-${Date.now()}-2`, label: "Typing", minutes: typing, color: block.color, imageUrl: SECTION_IMAGES[2] },
+    { id: `seg-${Date.now()}-3`, label: "Logout", minutes: logout, color: block.color, imageUrl: SECTION_IMAGES[4] },
+  ];
+}
+
+function selectedBlock() {
+  return state.schedule?.blocks.find((block) => block.id === state.selectedBlockId) || state.schedule?.blocks[0] || null;
+}
+
+function displayBlock() {
+  const mode = displayMode();
+  return mode === "sim" ? selectedBlock() : activeBlock(displayNow());
+}
+
+function sectionDisplayState(block) {
+  const sections = (block?.segments || []).slice(0, MAX_SECTIONS);
+  const mode = displayMode();
+  if (!block || !sections.length) {
+    return { sections: [], activeIndex: -1, blockTimer: "READY", status: "NO CLASS SELECTED" };
+  }
+
+  let elapsed = 0;
+  if (mode === "sim") {
+    if (!state.simStartedAt) {
+      return { sections, activeIndex: -1, blockTimer: "READY", status: "SIMULATION READY - SELECT A SECTION" };
+    }
+    const prior = sections.slice(0, state.simStartIndex).reduce((total, section) => total + section.minutes * 60, 0);
+    elapsed = prior + Math.max(0, Math.floor((Date.now() - state.simStartedAt) / 1000));
+  } else {
+    const now = displayNow();
+    elapsed = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - timeToSeconds(block.start);
+  }
+
+  const total = sections.reduce((sum, section) => sum + section.minutes * 60, 0);
+  let cursor = 0;
+  let activeIndex = -1;
+  let remaining = null;
+  sections.forEach((section, index) => {
+    const duration = section.minutes * 60;
+    if (elapsed >= cursor && elapsed < cursor + duration) {
+      activeIndex = index;
+      remaining = Math.max(0, cursor + duration - elapsed);
+    }
+    cursor += duration;
+  });
+
+  if (elapsed < 0) {
+    return { sections, activeIndex: -1, blockTimer: "READY", status: `${mode.toUpperCase()} MODE - WAITING FOR ${block.start}` };
+  }
+  if (elapsed >= total) {
+    return { sections, activeIndex: -1, blockTimer: "DONE", status: `${mode.toUpperCase()} MODE - CLASS COMPLETE` };
+  }
+  return { sections, activeIndex, blockTimer: formatSeconds(remaining), elapsed, total, status: `${mode.toUpperCase()} MODE ACTIVE` };
 }
 
 function renderLanding() {
@@ -151,7 +268,7 @@ function renderAuthPanel(error = state.authError || "") {
 
 function renderApp() {
   const schedule = state.schedule;
-  const block = activeBlock();
+  const block = displayBlock();
   const next = nextBlock(block);
   app.innerHTML = `
     <div class="app-shell">
@@ -205,7 +322,7 @@ function renderScheduleView() {
             ${["aurora", "matrix", "sunrise", "chalk", "orbit"].map((theme) => `<button class="theme-btn ${theme} ${schedule.theme.background === theme ? "active" : ""}" data-action="theme" data-theme="${theme}">${theme}</button>`).join("")}
           </div>
         </div>
-        ${renderDisplayView(activeBlock(), nextBlock(activeBlock()), true)}
+        ${renderDisplayView(selected || activeBlock(), nextBlock(selected || activeBlock()), true)}
       </section>
     </div>
   `;
@@ -224,6 +341,7 @@ function renderBlockRow(block) {
 }
 
 function renderSectionEditor(block) {
+  const canAddSection = block.segments.length < MAX_SECTIONS;
   return `
     <div class="field">
       <label>Selected class</label>
@@ -231,34 +349,115 @@ function renderSectionEditor(block) {
         ${state.schedule.blocks.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === block.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
       </select>
     </div>
+    <div class="section-toolbar">
+      <button class="btn small" data-action="apply-cls-template" data-block-id="${escapeHtml(block.id)}">Use CLS 4-section template</button>
+      <span class="muted">${block.segments.length}/${MAX_SECTIONS} sections</span>
+    </div>
     <div class="section-list">
-      ${block.segments.map((segment) => `
+      ${block.segments.slice(0, MAX_SECTIONS).map((segment) => `
         <div class="section-row" data-block-id="${escapeHtml(block.id)}" data-segment-id="${escapeHtml(segment.id)}">
-          <input value="${escapeHtml(segment.label)}" data-segment-field="label">
-          <input type="number" min="1" max="240" value="${escapeHtml(segment.minutes)}" data-segment-field="minutes">
-          <button class="icon-btn" title="Delete section" data-action="delete-section">x</button>
+          <img class="section-thumb" src="${escapeHtml(segment.imageUrl || randomSectionImage())}" alt="">
+          <input value="${escapeHtml(segment.label)}" aria-label="Section name" data-segment-field="label">
+          <input type="number" min="1" max="240" value="${escapeHtml(segment.minutes)}" aria-label="Section minutes" data-segment-field="minutes">
+          <button class="btn small" type="button" data-action="random-section-image">Random</button>
+          <label class="btn small upload-btn">
+            Upload
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-segment-upload>
+          </label>
+          <button class="icon-btn" title="Delete section" data-action="delete-section" ${block.segments.length <= 1 ? "disabled" : ""}>x</button>
         </div>
       `).join("")}
     </div>
-    <button class="btn small" data-action="add-section" data-block-id="${escapeHtml(block.id)}">Add section</button>
+    <button class="btn small" data-action="add-section" data-block-id="${escapeHtml(block.id)}" ${canAddSection ? "" : "disabled"}>Add section</button>
   `;
 }
 
 function renderDisplayView(block, next, compact = false) {
   const theme = state.schedule.theme.background;
-  const duration = block ? minutesBetween(block.start, block.end) : 0;
-  const firstSection = block?.segments?.[0]?.label || "Ready";
+  const mode = displayMode();
+  const display = sectionDisplayState(block);
+  let cursor = 0;
   return `
-    <section class="panel preview ${escapeHtml(theme)} ${compact ? "compact" : ""}">
-      <div class="preview-content">
+    <section class="panel preview cls-display ${escapeHtml(theme)} mode-${escapeHtml(mode)} ${compact ? "compact" : ""}">
+      <div class="display-head">
         <div>
           <div class="eyebrow">${escapeHtml(block?.start || "--:--")} - ${escapeHtml(block?.end || "--:--")}</div>
-          <div class="big-timer">${duration}</div>
-          <div class="current-label">${escapeHtml(block?.label || "No block")}</div>
-          <div class="next-label">${escapeHtml(firstSection)} - next: ${escapeHtml(next?.label || "Done")}</div>
+          <h2>${escapeHtml(block?.label || "No block")}</h2>
+          <p>${escapeHtml(display.status)}${next ? ` - next class: ${escapeHtml(next.label)}` : ""}</p>
         </div>
+        <div class="slot-timer">${escapeHtml(display.blockTimer)}</div>
+      </div>
+      ${compact ? "" : renderModeTools(display.sections)}
+      <div class="session-grid count-${Math.max(1, display.sections.length)}">
+        ${display.sections.map((segment, index) => {
+          const duration = Math.max(1, Number(segment.minutes || 1) * 60);
+          const elapsed = Number.isFinite(display.elapsed) ? display.elapsed : null;
+          const done = elapsed !== null && elapsed >= cursor + duration;
+          const active = index === display.activeIndex;
+          const progress = active && elapsed !== null ? Math.max(0, Math.min(1, (elapsed - cursor) / duration)) : done ? 1 : 0;
+          const ringOffset = Math.round(RING_CIRCUMFERENCE - progress * RING_CIRCUMFERENCE);
+          const timer = active && elapsed !== null ? formatSeconds(cursor + duration - elapsed) : done ? "DONE" : `${String(segment.minutes).padStart(2, "0")}:00`;
+          cursor += duration;
+          return renderSessionCard(segment, index, { active, done, timer, ringOffset });
+        }).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderModeTools(sections) {
+  const mode = displayMode();
+  return `
+    <div class="display-tools">
+      <div class="mode-switch inline">
+        ${["real", "sim", "flash"].map((item) => `<button class="sw-btn ${mode === item ? "active" : ""}" data-action="display-mode" data-mode="${item}">${item}</button>`).join("")}
+      </div>
+      ${mode === "sim" ? `
+        <div class="mode-tools">
+          <span class="tool-label">Jump:</span>
+          ${sections.map((section, index) => `<button class="tool-btn" data-action="sim-jump" data-index="${index}">${escapeHtml(section.label)}</button>`).join("")}
+        </div>
+      ` : ""}
+      ${mode === "flash" ? `
+        <div class="mode-tools">
+          <span class="tool-label">Time travel:</span>
+          ${[
+            [-3600, "-1h"],
+            [-300, "-5m"],
+            [-10, "-10s"],
+            [10, "+10s"],
+            [300, "+5m"],
+            [3600, "+1h"],
+            [0, "Now"],
+          ].map(([seconds, label]) => `<button class="tool-btn" data-action="${seconds === 0 ? "flash-reset" : "flash-adjust"}" data-seconds="${seconds}">${label}</button>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderSessionCard(segment, index, display) {
+  return `
+    <div class="session-card ${display.active ? "active" : ""} ${display.done ? "done" : ""}">
+      <div class="session-info">Session ${index + 1} - ${escapeHtml(segment.minutes)} Min</div>
+      <div class="s-title">${escapeHtml(segment.label)}</div>
+      <div class="circle-wrap">
+        <svg class="ring-svg" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="ringGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff3b30"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+          <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
+        </svg>
+        <div class="coin ${display.active ? "spinning" : ""}">
+          <div class="face front"><img src="${escapeHtml(segment.imageUrl || randomSectionImage())}" alt=""></div>
+          <div class="face back"><img src="${escapeHtml(segment.imageUrl || randomSectionImage())}" alt=""></div>
+        </div>
+      </div>
+      <div class="time-left">${escapeHtml(display.timer)}</div>
+    </div>
   `;
 }
 
@@ -400,7 +599,7 @@ app.addEventListener("click", async (event) => {
       end: "11:30",
       kind: "class",
       color: "#2563eb",
-      segments: [{ id: `seg-${Date.now()}`, label: "Section", minutes: 30, color: "#2563eb" }],
+      segments: clsSegmentsForBlock({ start: "11:00", end: "11:30", color: "#2563eb" }),
     });
     state.selectedBlockId = id;
     renderApp();
@@ -419,20 +618,59 @@ app.addEventListener("click", async (event) => {
     const blockId = button.dataset.blockId;
     state.schedule.blocks = state.schedule.blocks.map((block) => block.id === blockId ? {
       ...block,
-      segments: [...block.segments, { id: `seg-${Date.now()}`, label: "New section", minutes: 5, color: block.color }],
+      segments: block.segments.length >= MAX_SECTIONS ? block.segments : [
+        ...block.segments,
+        { id: `seg-${Date.now()}`, label: "New section", minutes: 5, color: block.color, imageUrl: randomSectionImage() },
+      ],
     } : block);
+    renderApp();
+  }
+  if (action === "apply-cls-template") {
+    const blockId = button.dataset.blockId;
+    state.schedule.blocks = state.schedule.blocks.map((block) => block.id === blockId ? {
+      ...block,
+      segments: clsSegmentsForBlock(block),
+    } : block);
+    renderApp();
+  }
+  if (action === "random-section-image") {
+    const row = button.closest("[data-segment-id]");
+    updateSegment(row.dataset.blockId, row.dataset.segmentId, "imageUrl", randomSectionImage());
     renderApp();
   }
   if (action === "delete-section") {
     const row = button.closest("[data-segment-id]");
     state.schedule.blocks = state.schedule.blocks.map((block) => block.id === row.dataset.blockId ? {
       ...block,
-      segments: block.segments.filter((segment) => segment.id !== row.dataset.segmentId),
+      segments: block.segments.length <= 1 ? block.segments : block.segments.filter((segment) => segment.id !== row.dataset.segmentId),
     } : block);
     renderApp();
   }
   if (action === "theme") {
     state.schedule.theme.background = button.dataset.theme;
+    renderApp();
+  }
+  if (action === "display-mode") {
+    state.schedule.theme.mode = button.dataset.mode;
+    if (button.dataset.mode !== "sim") {
+      state.simStartedAt = null;
+    }
+    renderApp();
+  }
+  if (action === "sim-jump") {
+    state.schedule.theme.mode = "sim";
+    state.simStartIndex = Number(button.dataset.index || 0);
+    state.simStartedAt = Date.now();
+    renderApp();
+  }
+  if (action === "flash-adjust") {
+    state.schedule.theme.mode = "flash";
+    state.flashOffsetSeconds += Number(button.dataset.seconds || 0);
+    renderApp();
+  }
+  if (action === "flash-reset") {
+    state.schedule.theme.mode = "flash";
+    state.flashOffsetSeconds = 0;
     renderApp();
   }
   if (action === "apply-draft") {
@@ -464,6 +702,38 @@ app.addEventListener("input", (event) => {
   if (input.matches("[data-segment-field]")) {
     const row = input.closest("[data-segment-id]");
     updateSegment(row.dataset.blockId, row.dataset.segmentId, input.dataset.segmentField, input.value);
+  }
+});
+
+app.addEventListener("change", (event) => {
+  const input = event.target;
+  if (input.matches("select[data-action='select-block']")) {
+    state.selectedBlockId = input.value;
+    renderApp();
+    return;
+  }
+  if (input.matches("[data-segment-upload]")) {
+    const row = input.closest("[data-segment-id]");
+    const file = input.files?.[0];
+    if (!file || !row) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      alert("Please choose an image file.");
+      input.value = "";
+      return;
+    }
+    if (file.size > 750 * 1024) {
+      alert("Please choose an image under 750 KB.");
+      input.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateSegment(row.dataset.blockId, row.dataset.segmentId, "imageUrl", String(reader.result || ""));
+      renderApp();
+    };
+    reader.readAsDataURL(file);
   }
 });
 

@@ -8,7 +8,8 @@ It includes:
 - User accounts with secure password hashing, Google sign-in, and cookie sessions.
 - SQLite persistence for users, schedules, sections, themes, and assistant messages.
 - A schedule editor for bell schedules and per-class section labels.
-- A live classroom display preview with selectable background animations.
+- CLS-style class sections with editable names, minutes, random images, and image upload.
+- A live classroom display preview with countdown rings, Real, Simulation, and Flash modes.
 - A targeted setup assistant that parses pasted bell schedules and drafts schedule/theme changes.
 - Docker deployment on port `2930`.
 

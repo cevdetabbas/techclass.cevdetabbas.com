@@ -1,5 +1,16 @@
 const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#d97706", "#dc2626", "#0891b2", "#4f46e5", "#16a34a"];
 const THEMES = new Set(["aurora", "matrix", "sunrise", "chalk", "orbit"]);
+const MODES = new Set(["real", "sim", "flash"]);
+const MAX_SECTIONS = 5;
+const SECTION_IMAGES = [
+  "/assets/cls/login.png",
+  "/assets/cls/learning.png",
+  "/assets/cls/typing.png",
+  "/assets/cls/nitrotype.jpg",
+  "/assets/cls/logout4.png",
+  "/assets/cls/abc.jpg",
+  "/assets/cls/pbs.png",
+];
 
 function toId(prefix = "id") {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -64,18 +75,38 @@ function durationMinutes(block) {
   return Math.max(1, end - start);
 }
 
+function cleanImageUrl(value, fallback = SECTION_IMAGES[0]) {
+  const imageUrl = String(value || "").trim();
+  if (SECTION_IMAGES.includes(imageUrl)) {
+    return imageUrl;
+  }
+  if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(imageUrl) && imageUrl.length <= 1_500_000) {
+    return imageUrl;
+  }
+  return fallback;
+}
+
 function defaultSegments(block) {
   const duration = durationMinutes(block);
-  if (duration <= 12) {
-    return [{ id: toId("seg"), label: "Launch", minutes: duration, color: block.color }];
+  if (duration <= 1) {
+    return [{ id: toId("seg"), label: "Login", minutes: 1, color: block.color, imageUrl: SECTION_IMAGES[0] }];
   }
-  const warmup = Math.min(8, Math.max(4, Math.round(duration * 0.15)));
-  const wrap = Math.min(7, Math.max(3, Math.round(duration * 0.12)));
-  const practice = Math.max(5, duration - warmup - wrap);
+  if (duration <= 6) {
+    return [
+      { id: toId("seg"), label: "Login", minutes: Math.max(1, Math.floor(duration / 2)), color: block.color, imageUrl: SECTION_IMAGES[0] },
+      { id: toId("seg"), label: "Logout", minutes: Math.max(1, Math.ceil(duration / 2)), color: block.color, imageUrl: SECTION_IMAGES[4] },
+    ];
+  }
+
+  const login = Math.min(3, Math.max(1, Math.round(duration * 0.08)));
+  const logout = Math.min(2, Math.max(1, Math.round(duration * 0.06)));
+  const typing = Math.min(10, Math.max(2, Math.round(duration * 0.22)));
+  const learning = Math.max(1, duration - login - typing - logout);
   return [
-    { id: toId("seg"), label: "Warm-up", minutes: warmup, color: block.color },
-    { id: toId("seg"), label: "Guided practice", minutes: practice, color: block.color },
-    { id: toId("seg"), label: "Wrap-up", minutes: wrap, color: block.color },
+    { id: toId("seg"), label: "Login", minutes: login, color: block.color, imageUrl: SECTION_IMAGES[0] },
+    { id: toId("seg"), label: "Learning", minutes: learning, color: block.color, imageUrl: SECTION_IMAGES[1] },
+    { id: toId("seg"), label: "Typing", minutes: typing, color: block.color, imageUrl: SECTION_IMAGES[2] },
+    { id: toId("seg"), label: "Logout", minutes: logout, color: block.color, imageUrl: SECTION_IMAGES[4] },
   ];
 }
 
@@ -114,6 +145,7 @@ export function normalizeSchedule(input) {
     accent: /^#[0-9a-f]{6}$/i.test(themeInput.accent || "") ? themeInput.accent : "#2563eb",
     motion: ["calm", "lively", "focus"].includes(themeInput.motion) ? themeInput.motion : "calm",
     timerStyle: ["ring", "bar", "minimal"].includes(themeInput.timerStyle) ? themeInput.timerStyle : "ring",
+    mode: MODES.has(themeInput.mode) ? themeInput.mode : "real",
   };
 
   const blocks = Array.isArray(input.blocks) ? input.blocks : [];
@@ -136,11 +168,12 @@ export function normalizeSchedule(input) {
       segments: [],
     };
     const rawSegments = Array.isArray(block.segments) ? block.segments : defaultSegments(cleanBlock);
-    cleanBlock.segments = rawSegments.slice(0, 8).map((segment, segmentIndex) => ({
+    cleanBlock.segments = rawSegments.slice(0, MAX_SECTIONS).map((segment, segmentIndex) => ({
       id: String(segment.id || toId("seg")).slice(0, 40),
       label: String(segment.label || `Section ${segmentIndex + 1}`).trim().slice(0, 50) || `Section ${segmentIndex + 1}`,
       minutes: Math.max(1, Math.min(240, Number(segment.minutes || 5))),
       color: /^#[0-9a-f]{6}$/i.test(segment.color || "") ? segment.color : color,
+      imageUrl: cleanImageUrl(segment.imageUrl, SECTION_IMAGES[segmentIndex % SECTION_IMAGES.length]),
     }));
     return cleanBlock;
   }).sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));

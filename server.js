@@ -39,6 +39,7 @@ const SESSION_COOKIE = "techclass_session";
 const OAUTH_STATE_COOKIE = "techclass_oauth_state";
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7;
 const OAUTH_STATE_SECONDS = 60 * 10;
+const MAX_BODY_BYTES = 3 * 1024 * 1024;
 
 initDb();
 deleteExpiredSessions();
@@ -126,7 +127,7 @@ function readBody(req) {
     let data = "";
     req.on("data", (chunk) => {
       data += chunk;
-      if (data.length > 1024 * 1024) {
+      if (data.length > MAX_BODY_BYTES) {
         reject(new Error("Request body is too large."));
         req.destroy();
       }
