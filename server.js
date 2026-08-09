@@ -377,11 +377,21 @@ function safePublicPath(pathname) {
 function sendFile(res, filePath, status = 200) {
   const extension = path.extname(filePath).toLowerCase();
   const type = MIME_TYPES[extension] || "application/octet-stream";
-  setSecurityHeaders(res);
-  res.writeHead(status, {
+  const isAppShell = [".html", ".js", ".css"].includes(extension);
+  const cacheControl = isAppShell
+    ? "no-store, no-cache, must-revalidate, max-age=0"
+    : process.env.NODE_ENV === "production"
+      ? "public, max-age=86400"
+      : "no-store";
+  const headers = {
     "Content-Type": type,
-    "Cache-Control": process.env.NODE_ENV === "production" ? "public, max-age=600" : "no-store",
-  });
+    "Cache-Control": cacheControl,
+  };
+  if (isAppShell) {
+    headers.Pragma = "no-cache";
+  }
+  setSecurityHeaders(res);
+  res.writeHead(status, headers);
   fs.createReadStream(filePath).pipe(res);
 }
 
