@@ -24,6 +24,10 @@ const state = {
   demoRunning: false,
   demoStartedAt: null,
   demoElapsedSeconds: 0,
+  publicDemoSessions: [],
+  publicDemoRunning: false,
+  publicDemoStartedAt: null,
+  publicDemoElapsedSeconds: 0,
   assistantMessages: [],
   draftPatch: null,
 };
@@ -52,7 +56,7 @@ function createDemoSession(label, minutes, imageUrl = randomSectionImage()) {
 function createDefaultDemoSessions() {
   return [
     createDemoSession("Login", 3, SECTION_IMAGES[0]),
-    createDemoSession("Learning", 30, SECTION_IMAGES[1]),
+    createDemoSession("Learning", 33, SECTION_IMAGES[1]),
     createDemoSession("Typing", 10, SECTION_IMAGES[2]),
     createDemoSession("Logout", 2, SECTION_IMAGES[4]),
   ];
@@ -84,6 +88,7 @@ function writeDemoSessions() {
 }
 
 state.demoSessions = readDemoSessions() || createDefaultDemoSessions();
+state.publicDemoSessions = createDefaultDemoSessions();
 
 const navItems = [
   { view: "schedule", label: "Schedule", short: "S" },
@@ -304,9 +309,14 @@ function renderLanding() {
             <div class="eyebrow">Classroom schedule studio</div>
             <h1>TechClass</h1>
             <p>TechClass helps teachers turn a rough bell schedule into a clean classroom dashboard: daily blocks, section labels, visual themes, and a focused assistant that understands pasted schedule text.</p>
-            <div class="hero-cta">
-              <button class="btn blue" data-action="open-auth" data-mode="signup">Create your studio</button>
-              <button class="btn" data-action="open-auth" data-mode="login">I already have one</button>
+            <div class="hero-action-stack">
+              <div class="hero-cta">
+                <button class="btn blue" data-action="open-auth" data-mode="signup">Create your studio</button>
+                <button class="btn" data-action="open-auth" data-mode="login">I already have one</button>
+              </div>
+              <div class="hero-demo-row">
+                <button class="btn demo-landing-btn" data-action="open-public-demo">Demo</button>
+              </div>
             </div>
           </section>
           <section class="showcase hero-showcase" aria-label="TechClass preview carousel">
@@ -347,6 +357,129 @@ function renderAuthPanel(error = state.authError || "") {
         <button class="btn blue" type="submit">${signup ? "Sign up" : "Sign in"}</button>
         <button class="btn ghost" type="button" data-action="toggle-auth" data-mode="${signup ? "login" : "signup"}">${signup ? "Use an existing account" : "Create an account"}</button>
       </form>
+    </div>
+  `;
+}
+
+function publicDemoTotalSeconds() {
+  return state.publicDemoSessions.reduce((sum, session) => sum + Math.max(1, Number(session.minutes || 1)) * 60, 0);
+}
+
+function currentPublicDemoElapsedSeconds() {
+  const base = Math.max(0, Number(state.publicDemoElapsedSeconds || 0));
+  if (!state.publicDemoRunning || !state.publicDemoStartedAt) {
+    return base;
+  }
+  return base + Math.max(0, Math.floor((Date.now() - state.publicDemoStartedAt) / 1000));
+}
+
+function clampPublicDemoElapsed() {
+  state.publicDemoElapsedSeconds = Math.min(currentPublicDemoElapsedSeconds(), publicDemoTotalSeconds());
+  state.publicDemoStartedAt = state.publicDemoRunning ? Date.now() : null;
+}
+
+function publicDemoDisplayState() {
+  const sessions = state.publicDemoSessions;
+  const total = publicDemoTotalSeconds();
+  const elapsed = Math.min(currentPublicDemoElapsedSeconds(), total);
+  let cursor = 0;
+  let activeIndex = -1;
+  sessions.forEach((session, index) => {
+    const duration = Math.max(1, Number(session.minutes || 1)) * 60;
+    if (elapsed >= cursor && elapsed < cursor + duration) {
+      activeIndex = index;
+    }
+    cursor += duration;
+  });
+  const status = elapsed >= total
+    ? "DEMO COMPLETE"
+    : state.publicDemoRunning
+      ? "DEMO RUNNING"
+      : elapsed > 0
+        ? "DEMO PAUSED"
+        : "DEMO READY";
+  return { sessions, total, elapsed, activeIndex, overallTimer: formatSeconds(total - elapsed), status };
+}
+
+function spinOffsetStyle(active) {
+  return active ? ` style="--spin-offset:${((Date.now() % 4000) / 1000).toFixed(3)}s"` : "";
+}
+
+function renderPublicDemoPage() {
+  const demo = publicDemoDisplayState();
+  let cursor = 0;
+  app.innerHTML = `
+    <div class="public-demo-page">
+      <header class="topbar public-demo-topbar">
+        <button class="brand brand-button" data-action="public-demo-home" aria-label="Back to TechClass home"><div class="brand-mark">T</div><span>TechClass</span></button>
+        <nav class="nav-actions">
+          <button class="btn ghost" data-action="public-demo-home">Home</button>
+          <button class="btn ghost" data-action="open-auth" data-mode="login">Sign in</button>
+          <button class="btn primary" data-action="open-auth" data-mode="signup">Sign up</button>
+        </nav>
+      </header>
+      <main class="public-demo-main">
+        <section class="panel preview cls-display public-demo-display aurora mode-sim">
+          <div class="display-head demo-head public-demo-head">
+            <div>
+              <div class="eyebrow">Live demo</div>
+              <h1>TechClass Demo</h1>
+              <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
+            </div>
+            <div class="demo-toolbar">
+              <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
+              <div class="demo-controls">
+                <button class="demo-control ${state.publicDemoRunning ? "active" : ""}" data-action="public-demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
+                <button class="demo-control" data-action="public-demo-stop" aria-label="Stop demo" title="Stop"><span class="stop-icon"></span></button>
+              </div>
+            </div>
+          </div>
+          <div class="public-demo-track">
+            ${demo.sessions.map((session, index) => {
+              const duration = Math.max(1, Number(session.minutes || 1)) * 60;
+              const done = demo.elapsed >= cursor + duration;
+              const active = index === demo.activeIndex && demo.elapsed < demo.total;
+              const progress = active ? Math.max(0, Math.min(1, (demo.elapsed - cursor) / duration)) : done ? 1 : 0;
+              const ringOffset = Math.round(RING_CIRCUMFERENCE - progress * RING_CIRCUMFERENCE);
+              const timer = active ? formatSeconds(cursor + duration - demo.elapsed) : done ? "DONE" : `${String(session.minutes).padStart(2, "0")}:00`;
+              cursor += duration;
+              return renderPublicDemoSessionCard(session, index, { active, done, timer, ringOffset });
+            }).join("")}
+            <button class="public-demo-add-tile" data-action="public-demo-add-session" aria-label="Add session" title="Add session">+</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  `;
+}
+
+function renderPublicDemoSessionCard(session, index, display) {
+  const canDelete = state.publicDemoSessions.length > 1;
+  return `
+    <div class="session-card demo-session-card public-demo-session-card ${display.active ? "active" : ""} ${display.done ? "done" : ""}" data-public-demo-session-id="${escapeHtml(session.id)}">
+      <button class="demo-delete" data-action="public-demo-delete-session" aria-label="Delete session" title="Delete session" ${canDelete ? "" : "disabled"}>x</button>
+      <div class="session-info">
+        Session ${index + 1} -
+        <input class="demo-minutes-input" type="number" min="1" max="240" value="${escapeHtml(session.minutes)}" data-public-demo-field="minutes" aria-label="Session minutes">
+        Min
+      </div>
+      <input class="s-title demo-name-input" value="${escapeHtml(session.label)}" data-public-demo-field="label" aria-label="Session name">
+      <div class="circle-wrap">
+        <svg class="ring-svg" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="publicDemoRingGrad${index}" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff9500"/><stop offset="50%" stop-color="#007aff"/><stop offset="100%" stop-color="#34c759"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+          <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
+        </svg>
+        <div class="coin ${display.active ? "spinning" : ""}"${spinOffsetStyle(display.active)}>
+          <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+          <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
+        </div>
+      </div>
+      <div class="time-left">${escapeHtml(display.timer)}</div>
     </div>
   `;
 }
@@ -564,7 +697,7 @@ function renderSessionCard(segment, index, display) {
           <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
           <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
         </svg>
-        <div class="coin ${display.active ? "spinning" : ""}">
+        <div class="coin ${display.active ? "spinning" : ""}"${spinOffsetStyle(display.active)}>
           <div class="face front"><img src="${escapeHtml(segment.imageUrl || randomSectionImage())}" alt=""></div>
           <div class="face back"><img src="${escapeHtml(segment.imageUrl || randomSectionImage())}" alt=""></div>
         </div>
@@ -672,7 +805,7 @@ function renderDemoSessionCard(session, index, display) {
           <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
           <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
         </svg>
-        <div class="coin ${display.active ? "spinning" : ""}">
+        <div class="coin ${display.active ? "spinning" : ""}"${spinOffsetStyle(display.active)}>
           <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
           <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
         </div>
@@ -793,6 +926,24 @@ function demoSessionById(sessionId) {
   return state.demoSessions.find((session) => session.id === sessionId) || null;
 }
 
+function updatePublicDemoSession(sessionId, field, value) {
+  state.publicDemoSessions = state.publicDemoSessions.map((session) => {
+    if (session.id !== sessionId) {
+      return session;
+    }
+    if (field === "minutes") {
+      const minutes = Math.max(1, Math.min(240, Math.round(Number(value || 0))));
+      return Number.isFinite(minutes) ? { ...session, minutes } : session;
+    }
+    return { ...session, label: String(value || "").slice(0, 50) };
+  });
+  clampPublicDemoElapsed();
+}
+
+function publicDemoSessionById(sessionId) {
+  return state.publicDemoSessions.find((session) => session.id === sessionId) || null;
+}
+
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
   const authError = params.get("authError");
@@ -800,6 +951,10 @@ async function bootstrap() {
     state.authMode = "login";
     state.authError = authError;
     window.history.replaceState({}, "", window.location.pathname);
+  }
+  if (window.location.pathname === "/demo" && !authError) {
+    renderPublicDemoPage();
+    return;
   }
 
   try {
@@ -810,7 +965,11 @@ async function bootstrap() {
     state.assistantMessages = messages.messages || [];
     renderApp();
   } catch {
-    renderLanding();
+    if (window.location.pathname === "/demo") {
+      renderPublicDemoPage();
+    } else {
+      renderLanding();
+    }
   }
 }
 
@@ -821,6 +980,9 @@ app.addEventListener("click", async (event) => {
   }
   const action = button.dataset.action;
   if (action === "open-auth") {
+    if (!state.user && window.location.pathname === "/demo") {
+      window.history.pushState({}, "", "/");
+    }
     state.authMode = button.dataset.mode;
     state.authError = "";
     renderLanding();
@@ -838,6 +1000,47 @@ app.addEventListener("click", async (event) => {
   if (action === "slide") {
     state.carousel = Number(button.dataset.index);
     renderLanding();
+  }
+  if (action === "open-public-demo") {
+    state.authMode = null;
+    state.authError = "";
+    window.history.pushState({}, "", "/demo");
+    renderPublicDemoPage();
+  }
+  if (action === "public-demo-home") {
+    state.publicDemoRunning = false;
+    state.publicDemoStartedAt = null;
+    window.history.pushState({}, "", "/");
+    renderLanding();
+  }
+  if (action === "public-demo-play") {
+    const total = publicDemoTotalSeconds();
+    const elapsed = currentPublicDemoElapsedSeconds();
+    state.publicDemoElapsedSeconds = elapsed >= total ? 0 : elapsed;
+    state.publicDemoStartedAt = Date.now();
+    state.publicDemoRunning = true;
+    renderPublicDemoPage();
+  }
+  if (action === "public-demo-stop") {
+    state.publicDemoElapsedSeconds = currentPublicDemoElapsedSeconds();
+    state.publicDemoStartedAt = null;
+    state.publicDemoRunning = false;
+    renderPublicDemoPage();
+  }
+  if (action === "public-demo-add-session") {
+    clampPublicDemoElapsed();
+    const index = state.publicDemoSessions.length;
+    state.publicDemoSessions.push(createDemoSession(`Session ${index + 1}`, 5, SECTION_IMAGES[index % SECTION_IMAGES.length]));
+    renderPublicDemoPage();
+  }
+  if (action === "public-demo-delete-session") {
+    const card = button.closest("[data-public-demo-session-id]");
+    if (card && state.publicDemoSessions.length > 1) {
+      clampPublicDemoElapsed();
+      state.publicDemoSessions = state.publicDemoSessions.filter((session) => session.id !== card.dataset.publicDemoSessionId);
+      clampPublicDemoElapsed();
+      renderPublicDemoPage();
+    }
   }
   if (action === "toggle-sidebar") {
     state.sidebarCollapsed = !state.sidebarCollapsed;
@@ -1011,10 +1214,25 @@ app.addEventListener("input", (event) => {
       updateDemoSession(row.dataset.demoSessionId, input.dataset.demoField, input.value);
     }
   }
+  if (input.matches("[data-public-demo-field]")) {
+    const row = input.closest("[data-public-demo-session-id]");
+    if (row) {
+      updatePublicDemoSession(row.dataset.publicDemoSessionId, input.dataset.publicDemoField, input.value);
+    }
+  }
 });
 
 app.addEventListener("change", (event) => {
   const input = event.target;
+  if (input.matches("[data-public-demo-field]")) {
+    const row = input.closest("[data-public-demo-session-id]");
+    const session = row ? publicDemoSessionById(row.dataset.publicDemoSessionId) : null;
+    if (session && input.dataset.publicDemoField === "minutes") {
+      input.value = session.minutes;
+    }
+    renderPublicDemoPage();
+    return;
+  }
   if (input.matches("[data-demo-field]")) {
     const row = input.closest("[data-demo-session-id]");
     const session = row ? demoSessionById(row.dataset.demoSessionId) : null;
@@ -1093,6 +1311,21 @@ setInterval(() => {
 setInterval(updateAppClock, 1000);
 
 setInterval(() => {
+  if (state.user || window.location.pathname !== "/demo" || !state.publicDemoRunning) {
+    return;
+  }
+  if (document.activeElement?.matches("[data-public-demo-field]")) {
+    return;
+  }
+  if (currentPublicDemoElapsedSeconds() >= publicDemoTotalSeconds()) {
+    state.publicDemoElapsedSeconds = publicDemoTotalSeconds();
+    state.publicDemoStartedAt = null;
+    state.publicDemoRunning = false;
+  }
+  renderPublicDemoPage();
+}, 1000);
+
+setInterval(() => {
   if (!state.user || state.view !== "demo" || !state.demoRunning) {
     return;
   }
@@ -1120,5 +1353,20 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("focus", heartbeat);
+
+window.addEventListener("popstate", () => {
+  if (state.user) {
+    return;
+  }
+  state.authMode = null;
+  state.authError = "";
+  if (window.location.pathname === "/demo") {
+    renderPublicDemoPage();
+  } else {
+    state.publicDemoRunning = false;
+    state.publicDemoStartedAt = null;
+    renderLanding();
+  }
+});
 
 bootstrap();
