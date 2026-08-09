@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSession,
+  createOrUpdateGoogleUser,
   createUser,
   deleteExpiredSessions,
   deleteSession,
@@ -23,13 +24,21 @@ import {
   verifyPassword,
 } from "./src/auth.js";
 import { buildAssistantResponse, normalizeSchedule } from "./src/assistant.js";
+import {
+  buildGoogleAuthUrl,
+  exchangeGoogleCode,
+  hasGoogleOAuthConfig,
+  readGoogleProfile,
+} from "./src/googleAuth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "public");
 const PORT = Number(process.env.PORT || 2930);
 const SESSION_COOKIE = "techclass_session";
+const OAUTH_STATE_COOKIE = "techclass_oauth_state";
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7;
+const OAUTH_STATE_SECONDS = 60 * 10;
 
 initDb();
 deleteExpiredSessions();
@@ -73,7 +82,43 @@ function setSessionCookie(token) {
 }
 
 function clearSessionCookie() {
-  return `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`;
+  const parts = [`${SESSION_COOKIE}=`, "HttpOnly", "Path=/", "SameSite=Lax", "Max-Age=0"];
+  if (process.env.COOKIE_SECURE === "true") {
+    parts.push("Secure");
+  }
+  return parts.join("; ");
+}
+
+function setOAuthStateCookie(state) {
+  const parts = [
+    `${OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}`,
+    "HttpOnly",
+    "Path=/",
+    "SameSite=Lax",
+    `Max-Age=${OAUTH_STATE_SECONDS}`,
+  ];
+  if (process.env.COOKIE_SECURE === "true") {
+    parts.push("Secure");
+  }
+  return parts.join("; ");
+}
+
+function clearOAuthStateCookie() {
+  const parts = [`${OAUTH_STATE_COOKIE}=`, "HttpOnly", "Path=/", "SameSite=Lax", "Max-Age=0"];
+  if (process.env.COOKIE_SECURE === "true") {
+    parts.push("Secure");
+  }
+  return parts.join("; ");
+}
+
+function sendRedirect(res, location, headers = {}) {
+  setSecurityHeaders(res);
+  res.writeHead(302, { Location: location, ...headers });
+  res.end();
+}
+
+function redirectWithAuthError(res, message, headers = {}) {
+  sendRedirect(res, `/?authError=${encodeURIComponent(message)}`, headers);
 }
 
 function readBody(req) {
@@ -106,6 +151,7 @@ function publicUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    avatarUrl: user.avatar_url || null,
     createdAt: user.created_at,
   };
 }
@@ -144,6 +190,53 @@ function getAuthenticatedUser(req, res) {
 async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/health") {
     sendJson(res, 200, { ok: true, service: "techclass", port: PORT });
+    return true;
+  }
+
+  if (req.method === "GET" && pathname === "/api/auth/google") {
+    if (!hasGoogleOAuthConfig()) {
+      redirectWithAuthError(res, "Google sign-in is not configured yet.");
+      return true;
+    }
+
+    const state = createRawSessionToken();
+    sendRedirect(res, buildGoogleAuthUrl({ req, state }), { "Set-Cookie": setOAuthStateCookie(state) });
+    return true;
+  }
+
+  if (req.method === "GET" && pathname === "/api/auth/google/callback") {
+    try {
+      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const error = url.searchParams.get("error");
+      if (error) {
+        redirectWithAuthError(res, "Google sign-in was cancelled.", { "Set-Cookie": clearOAuthStateCookie() });
+        return true;
+      }
+
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const cookies = parseCookies(req.headers.cookie || "");
+      if (!code || !state || !cookies[OAUTH_STATE_COOKIE] || state !== cookies[OAUTH_STATE_COOKIE]) {
+        redirectWithAuthError(res, "Google sign-in state did not match. Please try again.", { "Set-Cookie": clearOAuthStateCookie() });
+        return true;
+      }
+      if (!hasGoogleOAuthConfig()) {
+        redirectWithAuthError(res, "Google sign-in is not configured yet.", { "Set-Cookie": clearOAuthStateCookie() });
+        return true;
+      }
+
+      const tokens = await exchangeGoogleCode({ req, code });
+      const profile = await readGoogleProfile(tokens.access_token);
+      const user = createOrUpdateGoogleUser(profile);
+      const sessionToken = createRawSessionToken();
+      createSession({ userId: user.id, token: sessionToken, maxAgeSeconds: ONE_WEEK_SECONDS });
+      sendRedirect(res, "/", {
+        "Set-Cookie": [setSessionCookie(sessionToken), clearOAuthStateCookie()],
+      });
+    } catch (error) {
+      console.error(error);
+      redirectWithAuthError(res, "Google sign-in failed. Please try again.", { "Set-Cookie": clearOAuthStateCookie() });
+    }
     return true;
   }
 

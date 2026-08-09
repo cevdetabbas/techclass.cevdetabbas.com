@@ -9,6 +9,11 @@ services:
       NODE_ENV: production
       PORT: "2930"
       DATA_DIR: /app/data
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
     volumes:
       - ./data:/app/data
     restart: unless-stopped

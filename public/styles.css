@@ -84,6 +84,7 @@ button {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.75);
   border: 1px solid var(--line);
+  text-decoration: none;
 }
 .btn.primary { color: #fff; background: var(--ink); border-color: var(--ink); }
 .btn.blue { color: #fff; background: var(--accent); border-color: var(--accent); }
@@ -280,6 +281,42 @@ h1 {
 }
 .auth-card h2 { margin: 0 0 6px; font-size: 28px; }
 .auth-card p { margin: 0 0 18px; color: var(--muted); }
+.google-btn {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 14px;
+  background: #fff;
+  color: #202124;
+  border-color: #dadce0;
+}
+.google-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 950;
+  color: #2563eb;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
 .field { display: grid; gap: 7px; margin-bottom: 14px; }
 .field label { font-size: 12px; font-weight: 900; text-transform: uppercase; color: var(--muted); }
 .field input, .field select, .field textarea {

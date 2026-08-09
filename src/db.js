@@ -35,6 +35,8 @@ export function initDb() {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      google_sub TEXT,
+      avatar_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -68,6 +70,7 @@ export function initDb() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+  migrateUsersTable();
 }
 
 function database() {
@@ -75,6 +78,20 @@ function database() {
     initDb();
   }
   return db;
+}
+
+function hasColumn(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
+}
+
+function migrateUsersTable() {
+  if (!hasColumn("users", "google_sub")) {
+    db.exec("ALTER TABLE users ADD COLUMN google_sub TEXT");
+  }
+  if (!hasColumn("users", "avatar_url")) {
+    db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL");
 }
 
 export function createUser({ name, email, passwordHash }) {
@@ -89,14 +106,53 @@ export function createUser({ name, email, passwordHash }) {
 
 export function getUserByEmail(email) {
   return database()
-    .prepare("SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE email = ?")
+    .prepare("SELECT id, name, email, password_hash, google_sub, avatar_url, created_at, updated_at FROM users WHERE email = ?")
     .get(email) || null;
 }
 
 export function getUserById(id) {
   return database()
-    .prepare("SELECT id, name, email, password_hash, created_at, updated_at FROM users WHERE id = ?")
+    .prepare("SELECT id, name, email, password_hash, google_sub, avatar_url, created_at, updated_at FROM users WHERE id = ?")
     .get(id) || null;
+}
+
+export function getUserByGoogleSub(googleSub) {
+  return database()
+    .prepare("SELECT id, name, email, password_hash, google_sub, avatar_url, created_at, updated_at FROM users WHERE google_sub = ?")
+    .get(googleSub) || null;
+}
+
+export function createOrUpdateGoogleUser({ googleSub, email, name, avatarUrl }) {
+  const existingGoogleUser = getUserByGoogleSub(googleSub);
+  const timestamp = nowIso();
+  if (existingGoogleUser) {
+    const emailOwner = getUserByEmail(email);
+    if (emailOwner && emailOwner.id !== existingGoogleUser.id) {
+      throw new Error("That Google email belongs to another TechClass account.");
+    }
+    database()
+      .prepare("UPDATE users SET name = ?, email = ?, avatar_url = ?, updated_at = ? WHERE id = ?")
+      .run(name, email, avatarUrl, timestamp, existingGoogleUser.id);
+    return getUserById(existingGoogleUser.id);
+  }
+
+  const existingEmailUser = getUserByEmail(email);
+  if (existingEmailUser) {
+    if (existingEmailUser.google_sub && existingEmailUser.google_sub !== googleSub) {
+      throw new Error("That TechClass account is already linked to another Google account.");
+    }
+    database()
+      .prepare("UPDATE users SET google_sub = ?, avatar_url = ?, updated_at = ? WHERE id = ?")
+      .run(googleSub, avatarUrl, timestamp, existingEmailUser.id);
+    return getUserById(existingEmailUser.id);
+  }
+
+  const result = database()
+    .prepare("INSERT INTO users (name, email, password_hash, google_sub, avatar_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(name, email, `google$${googleSub}`, googleSub, avatarUrl, timestamp, timestamp);
+  const user = getUserById(Number(result.lastInsertRowid));
+  saveSchedule(user.id, defaultSchedule(`${name}'s TechClass`));
+  return user;
 }
 
 export function createSession({ userId, token, maxAgeSeconds }) {

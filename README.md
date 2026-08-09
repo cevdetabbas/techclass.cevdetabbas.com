@@ -5,7 +5,7 @@ TechClass is a teacher-owned classroom schedule studio for `techclass.cevdetabba
 It includes:
 
 - A launch landing page with sign in and sign up.
-- User accounts with secure password hashing and cookie sessions.
+- User accounts with secure password hashing, Google sign-in, and cookie sessions.
 - SQLite persistence for users, schedules, sections, themes, and assistant messages.
 - A schedule editor for bell schedules and per-class section labels.
 - A live classroom display preview with selectable background animations.
@@ -47,3 +47,27 @@ http://<WSL_IP>:2930
 ```
 
 Cloudflare Tunnel can route `techclass.cevdetabbas.com` to that local service.
+
+## Google Sign-In
+
+Create a Google OAuth client as a **Web application** and add:
+
+```text
+Authorized JavaScript origin:
+https://techclass.cevdetabbas.com
+
+Authorized redirect URI:
+https://techclass.cevdetabbas.com/api/auth/google/callback
+```
+
+Then put these values in `.env`:
+
+```env
+PUBLIC_BASE_URL=https://techclass.cevdetabbas.com
+COOKIE_SECURE=true
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=https://techclass.cevdetabbas.com/api/auth/google/callback
+```
+
+If Cloudflare Access is enabled for the hostname, allow public access or add a bypass policy for TechClass and its Google callback. Otherwise Google will redirect back to Cloudflare Access instead of the app.

@@ -5,6 +5,7 @@ const state = {
   schedule: null,
   view: "schedule",
   authMode: null,
+  authError: "",
   carousel: 0,
   selectedBlockId: null,
   assistantMessages: [],
@@ -128,13 +129,15 @@ function renderLanding() {
   `;
 }
 
-function renderAuthPanel(error = "") {
+function renderAuthPanel(error = state.authError || "") {
   const signup = state.authMode === "signup";
   return `
     <div class="auth-panel" data-action="close-auth">
       <form class="auth-card" data-auth-form="${signup ? "signup" : "login"}">
         <h2>${signup ? "Create your studio" : "Welcome back"}</h2>
         <p>${signup ? "Save schedules, sections, themes, and assistant drafts." : "Open your saved TechClass workspace."}</p>
+        <a class="btn google-btn" href="/api/auth/google"><span class="google-mark">G</span>${signup ? "Sign up with Google" : "Sign in with Google"}</a>
+        <div class="auth-divider"><span>or use email</span></div>
         ${signup ? `<div class="field"><label>Name</label><input name="name" autocomplete="name" required></div>` : ""}
         <div class="field"><label>Email</label><input type="email" name="email" autocomplete="email" required></div>
         <div class="field"><label>Password</label><input type="password" name="password" autocomplete="${signup ? "new-password" : "current-password"}" required minlength="8"></div>
@@ -330,6 +333,14 @@ function updateSegment(blockId, segmentId, field, value) {
 }
 
 async function bootstrap() {
+  const params = new URLSearchParams(window.location.search);
+  const authError = params.get("authError");
+  if (authError) {
+    state.authMode = "login";
+    state.authError = authError;
+    window.history.replaceState({}, "", window.location.pathname);
+  }
+
   try {
     const payload = await api("/api/me");
     state.user = payload.user;
@@ -350,14 +361,17 @@ app.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   if (action === "open-auth") {
     state.authMode = button.dataset.mode;
+    state.authError = "";
     renderLanding();
   }
   if (action === "toggle-auth") {
     state.authMode = button.dataset.mode;
+    state.authError = "";
     renderLanding();
   }
   if (action === "close-auth" && event.target.classList.contains("auth-panel")) {
     state.authMode = null;
+    state.authError = "";
     renderLanding();
   }
   if (action === "slide") {
@@ -465,6 +479,7 @@ app.addEventListener("submit", async (event) => {
       state.user = payload.user;
       setSchedule(payload.schedule);
       state.authMode = null;
+      state.authError = "";
       renderApp();
     } catch (error) {
       const panel = authForm.querySelector(".form-error");

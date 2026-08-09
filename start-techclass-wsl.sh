@@ -23,7 +23,12 @@ fi
 
 export WSL_IP
 printf '%s\n' "$WSL_IP" > .wsl-ip
-printf 'WSL_IP=%s\n' "$WSL_IP" > .env
+touch .env
+if grep -q '^WSL_IP=' .env; then
+  sed -i "s|^WSL_IP=.*|WSL_IP=$WSL_IP|" .env
+else
+  printf '\nWSL_IP=%s\n' "$WSL_IP" >> .env
+fi
 
 docker rm -f techclass.cevdetabbas.com >/dev/null 2>&1 || true
 
