@@ -93,24 +93,44 @@ button {
 
 .hero {
   position: relative;
-  min-height: 720px;
-  padding: 122px 38px 48px;
+  min-height: 100vh;
+  padding: 118px 38px 56px;
+  display: flex;
+  align-items: center;
   overflow: hidden;
 }
 
-.hero-backdrop {
-  position: absolute;
-  inset: 88px 4vw auto;
-  height: 548px;
+.hero-layout {
+  position: relative;
+  z-index: 2;
+  width: min(1180px, calc(100vw - 76px));
+  min-height: 560px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, .82fr) minmax(0, 1.18fr);
+  align-items: stretch;
+  overflow: hidden;
   border-radius: 8px;
-  overflow: hidden;
+  border: 1px solid rgba(19, 32, 29, 0.1);
+  background: #f8faf6;
   box-shadow: var(--shadow);
-  background:
-    linear-gradient(90deg, rgba(5, 11, 18, .78), rgba(5, 11, 18, .18)),
-    linear-gradient(135deg, #0f172a, #134e4a 50%, #f59e0b);
 }
 
-.hero-backdrop::before {
+.hero-copy {
+  position: relative;
+  width: auto;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(30px, 4vw, 54px);
+  background:
+    linear-gradient(90deg, rgba(5, 11, 18, .86), rgba(5, 11, 18, .58)),
+    linear-gradient(135deg, #0f172a, #134e4a 58%, #d97706);
+  overflow: hidden;
+}
+
+.hero-copy::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -118,25 +138,12 @@ button {
     linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px);
   background-size: 44px 44px;
-  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(90deg, black 0 72%, transparent);
 }
 
-.hero-layout {
+.hero-copy > * {
   position: relative;
-  z-index: 2;
-  width: min(1180px, calc(100vw - 76px));
-  min-height: 510px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: minmax(280px, .78fr) minmax(520px, 1.22fr);
-  gap: 34px;
-  align-items: center;
-}
-
-.hero-copy {
-  position: relative;
-  width: auto;
-  color: #fff;
+  z-index: 1;
 }
 
 .eyebrow {
@@ -152,6 +159,11 @@ h1 {
   font-size: clamp(52px, 8vw, 108px);
   line-height: .86;
   letter-spacing: 0;
+}
+
+.hero-copy h1 {
+  font-size: clamp(54px, 5.8vw, 78px);
+  line-height: .9;
 }
 
 .hero-copy p {
@@ -174,11 +186,14 @@ h1 {
   position: relative;
   margin: 0;
   width: 100%;
-  background: rgba(255,255,255,.9);
-  border: 1px solid rgba(255,255,255,.64);
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 30px 80px rgba(0,0,0,.24);
+  background: #f8faf6;
+  border-left: 1px solid rgba(19,32,29,.1);
+  border-radius: 0;
+  padding: clamp(16px, 2vw, 26px);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .slide {
@@ -403,17 +418,15 @@ h1 {
 
 @media (max-width: 980px) {
   .topbar { padding: 0 18px; }
-  .hero { padding: 112px 18px 42px; min-height: 940px; }
-  .hero-backdrop { inset-inline: 18px; height: 780px; }
+  .hero { padding: 104px 18px 42px; min-height: 100vh; align-items: flex-start; }
   .hero-layout {
     width: 100%;
     min-height: 0;
     grid-template-columns: 1fr;
-    gap: 28px;
     align-items: start;
   }
-  .hero-copy { width: min(730px, 100%); }
-  .showcase { padding: 12px; }
+  .hero-copy { width: 100%; padding: 38px 24px 28px; }
+  .showcase { padding: 16px; border-left: 0; border-top: 1px solid rgba(19,32,29,.1); }
   .slide-art { aspect-ratio: 16 / 10; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: sticky; top: 0; z-index: 10; }

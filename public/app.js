@@ -96,7 +96,6 @@ function renderLanding() {
         </nav>
       </header>
       <main class="hero">
-        <div class="hero-backdrop"></div>
         <div class="hero-layout">
           <section class="hero-copy">
             <div class="eyebrow">Classroom schedule studio</div>
