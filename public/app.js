@@ -182,6 +182,25 @@ function formatSeconds(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
+function formatAppClock(date = new Date()) {
+  return {
+    date: `${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}.${date.getFullYear()}`,
+    time: date.toLocaleTimeString("tr-TR", { hour12: false }),
+  };
+}
+
+function updateAppClock() {
+  const clock = formatAppClock();
+  const dateDisplay = document.querySelector("#app-date-display");
+  const timeDisplay = document.querySelector("#app-time-display");
+  if (dateDisplay) {
+    dateDisplay.textContent = clock.date;
+  }
+  if (timeDisplay) {
+    timeDisplay.textContent = clock.time;
+  }
+}
+
 function displayMode() {
   return state.schedule?.theme?.mode || "real";
 }
@@ -337,6 +356,7 @@ function renderApp() {
   const block = displayBlock();
   const next = nextBlock(block);
   const collapsed = state.sidebarCollapsed;
+  const clock = formatAppClock();
   app.innerHTML = `
     <div class="app-shell ${collapsed ? "sidebar-collapsed" : ""}">
       <aside class="sidebar ${collapsed ? "collapsed" : ""}">
@@ -348,13 +368,23 @@ function renderApp() {
       </aside>
       <main class="main-area">
         <header class="app-head">
-          <div>
+          <div class="head-metric">
+            <span class="head-label">Date:</span>
+            <span class="head-val" id="app-date-display">${escapeHtml(clock.date)}</span>
+          </div>
+          <div class="app-title-block">
             <h1>${escapeHtml(schedule.title)}</h1>
             <p>${escapeHtml(state.user.name)} - ${escapeHtml(state.user.email)}</p>
           </div>
-          <div class="nav-actions">
-            <button class="btn" data-action="save">Save</button>
-            <button class="btn danger" data-action="logout">Sign out</button>
+          <div class="head-side right">
+            <div class="head-metric align-right">
+              <span class="head-label">Time:</span>
+              <span class="head-val" id="app-time-display">${escapeHtml(clock.time)}</span>
+            </div>
+            <div class="nav-actions">
+              <button class="btn" data-action="save">Save</button>
+              <button class="btn danger" data-action="logout">Sign out</button>
+            </div>
           </div>
         </header>
         ${state.view === "schedule" ? renderScheduleView() : ""}
@@ -364,36 +394,50 @@ function renderApp() {
       </main>
     </div>
   `;
+  updateAppClock();
 }
 
 function renderScheduleView() {
   const schedule = state.schedule;
   const selected = schedule.blocks.find((block) => block.id === state.selectedBlockId) || schedule.blocks[0];
   return `
-    <div class="grid">
-      <section class="panel">
-        <h2>Bell schedule</h2>
-        <div class="field">
-          <label>Studio title</label>
-          <input value="${escapeHtml(schedule.title)}" data-bind="title">
-        </div>
-        <div class="schedule-list">
-          ${schedule.blocks.map((block) => renderBlockRow(block)).join("")}
-        </div>
-        <button class="btn small" data-action="add-block">Add block</button>
-      </section>
-      <section class="panel">
-        <h2>Sections and theme</h2>
-        ${selected ? renderSectionEditor(selected) : ""}
-        <div class="field">
-          <label>Background animation</label>
-          <div class="theme-grid">
-            ${["aurora", "matrix", "sunrise", "chalk", "orbit"].map((theme) => `<button class="theme-btn ${theme} ${schedule.theme.background === theme ? "active" : ""}" data-action="theme" data-theme="${theme}">${theme}</button>`).join("")}
+    <div class="schedule-stage">
+      <div class="grid">
+        <section class="panel">
+          <h2>Bell schedule</h2>
+          <div class="field">
+            <label>Studio title</label>
+            <input value="${escapeHtml(schedule.title)}" data-bind="title">
           </div>
-        </div>
-        ${renderDisplayView(selected || activeBlock(), nextBlock(selected || activeBlock()), true)}
-      </section>
+          <div class="schedule-list">
+            ${schedule.blocks.map((block) => renderBlockRow(block)).join("")}
+          </div>
+          <button class="btn small" data-action="add-block">Add block</button>
+        </section>
+        <section class="panel">
+          <h2>Sections and theme</h2>
+          ${selected ? renderSectionEditor(selected) : ""}
+          <div class="field">
+            <label>Background animation</label>
+            <div class="theme-grid">
+              ${["aurora", "matrix", "sunrise", "chalk", "orbit"].map((theme) => `<button class="theme-btn ${theme} ${schedule.theme.background === theme ? "active" : ""}" data-action="theme" data-theme="${theme}">${theme}</button>`).join("")}
+            </div>
+          </div>
+          ${renderDisplayView(selected || activeBlock(), nextBlock(selected || activeBlock()), true)}
+        </section>
+      </div>
+      ${renderAssistantNudge()}
     </div>
+  `;
+}
+
+function renderAssistantNudge() {
+  return `
+    <button class="assistant-nudge" data-action="view" data-view="assistant" aria-label="AI assistant: Paste your schedule and lesson template to automatically arrange your schedule" title="AI assistant">
+      <span class="assistant-nudge-label">AI assistant</span>
+      <span class="assistant-bubble">Paste your schedule and lesson template to automatically arrange your schedule</span>
+      <img class="assistant-penguin" src="/assets/penguin.svg" alt="">
+    </button>
   `;
 }
 
@@ -1045,6 +1089,8 @@ setInterval(() => {
     renderApp();
   }
 }, 30000);
+
+setInterval(updateAppClock, 1000);
 
 setInterval(() => {
   if (!state.user || state.view !== "demo" || !state.demoRunning) {
