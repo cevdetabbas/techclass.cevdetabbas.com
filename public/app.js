@@ -25,6 +25,7 @@ const state = {
   demoStartedAt: null,
   demoElapsedSeconds: 0,
   publicDemoSessions: [],
+  publicDemoTitle: "TechClass Demo",
   publicDemoRunning: false,
   publicDemoStartedAt: null,
   publicDemoElapsedSeconds: 0,
@@ -391,6 +392,9 @@ function publicDemoDisplayState() {
     }
     cursor += duration;
   });
+  if (!state.publicDemoRunning && elapsed <= 0) {
+    activeIndex = -1;
+  }
   const status = elapsed >= total
     ? "DEMO COMPLETE"
     : state.publicDemoRunning
@@ -423,14 +427,15 @@ function renderPublicDemoPage() {
           <div class="display-head demo-head public-demo-head">
             <div>
               <div class="eyebrow">Live demo</div>
-              <h1>TechClass Demo</h1>
+              <h1><input class="public-demo-title-input" value="${escapeHtml(state.publicDemoTitle)}" data-public-demo-title aria-label="Demo title"></h1>
               <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
             </div>
             <div class="demo-toolbar">
               <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
               <div class="demo-controls">
                 <button class="demo-control ${state.publicDemoRunning ? "active" : ""}" data-action="public-demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
-                <button class="demo-control" data-action="public-demo-stop" aria-label="Stop demo" title="Stop"><span class="stop-icon"></span></button>
+                <button class="demo-control" data-action="public-demo-pause" aria-label="Pause demo" title="Pause"><span class="pause-icon"></span></button>
+                <button class="demo-control" data-action="public-demo-reset" aria-label="Reset demo" title="Reset"><span class="reset-icon"></span></button>
               </div>
             </div>
           </div>
@@ -443,7 +448,7 @@ function renderPublicDemoPage() {
               const ringOffset = Math.round(RING_CIRCUMFERENCE - progress * RING_CIRCUMFERENCE);
               const timer = active ? formatSeconds(cursor + duration - demo.elapsed) : done ? "DONE" : `${String(session.minutes).padStart(2, "0")}:00`;
               cursor += duration;
-              return renderPublicDemoSessionCard(session, index, { active, done, timer, ringOffset });
+              return renderPublicDemoSessionCard(session, index, { active, done, timer, ringOffset, spinning: active && state.publicDemoRunning });
             }).join("")}
             <button class="public-demo-add-tile" data-action="public-demo-add-session" aria-label="Add session" title="Add session">+</button>
           </div>
@@ -474,7 +479,7 @@ function renderPublicDemoSessionCard(session, index, display) {
           <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
           <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
         </svg>
-        <div class="coin ${display.active ? "spinning" : ""}"${spinOffsetStyle(display.active)}>
+        <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
           <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
           <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
         </div>
@@ -737,6 +742,9 @@ function demoDisplayState() {
     }
     cursor += duration;
   });
+  if (!state.demoRunning && elapsed <= 0) {
+    activeIndex = -1;
+  }
   const status = elapsed >= total
     ? "DEMO COMPLETE"
     : state.demoRunning
@@ -777,7 +785,7 @@ function renderDemoView() {
           const ringOffset = Math.round(RING_CIRCUMFERENCE - progress * RING_CIRCUMFERENCE);
           const timer = active ? formatSeconds(cursor + duration - demo.elapsed) : done ? "DONE" : `${String(session.minutes).padStart(2, "0")}:00`;
           cursor += duration;
-          return renderDemoSessionCard(session, index, { active, done, timer, ringOffset });
+          return renderDemoSessionCard(session, index, { active, done, timer, ringOffset, spinning: active && state.demoRunning });
         }).join("")}
       </div>
     </section>
@@ -805,7 +813,7 @@ function renderDemoSessionCard(session, index, display) {
           <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
           <circle class="ring-bar" style="stroke-dashoffset:${display.ringOffset}" cx="50" cy="50" r="45"></circle>
         </svg>
-        <div class="coin ${display.active ? "spinning" : ""}"${spinOffsetStyle(display.active)}>
+        <div class="coin ${display.spinning ? "spinning" : ""}"${spinOffsetStyle(display.spinning)}>
           <div class="face front"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
           <div class="face back"><img src="${escapeHtml(session.imageUrl || randomSectionImage())}" alt=""></div>
         </div>
@@ -1021,8 +1029,14 @@ app.addEventListener("click", async (event) => {
     state.publicDemoRunning = true;
     renderPublicDemoPage();
   }
-  if (action === "public-demo-stop") {
+  if (action === "public-demo-pause") {
     state.publicDemoElapsedSeconds = currentPublicDemoElapsedSeconds();
+    state.publicDemoStartedAt = null;
+    state.publicDemoRunning = false;
+    renderPublicDemoPage();
+  }
+  if (action === "public-demo-reset") {
+    state.publicDemoElapsedSeconds = 0;
     state.publicDemoStartedAt = null;
     state.publicDemoRunning = false;
     renderPublicDemoPage();
@@ -1220,6 +1234,9 @@ app.addEventListener("input", (event) => {
       updatePublicDemoSession(row.dataset.publicDemoSessionId, input.dataset.publicDemoField, input.value);
     }
   }
+  if (input.matches("[data-public-demo-title]")) {
+    state.publicDemoTitle = input.value.slice(0, 60);
+  }
 });
 
 app.addEventListener("change", (event) => {
@@ -1315,6 +1332,9 @@ setInterval(() => {
     return;
   }
   if (document.activeElement?.matches("[data-public-demo-field]")) {
+    return;
+  }
+  if (document.activeElement?.matches("[data-public-demo-title]")) {
     return;
   }
   if (currentPublicDemoElapsedSeconds() >= publicDemoTotalSeconds()) {
