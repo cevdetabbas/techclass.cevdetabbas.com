@@ -91,6 +91,18 @@ button {
 .btn.ghost { background: transparent; }
 .btn.danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 .btn.small { min-height: 32px; padding: 0 10px; font-size: 12px; }
+.google-nav-btn {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  color: #2563eb;
+  background: #fff;
+  border-color: #dadce0;
+  font-size: 18px;
+  font-weight: 950;
+  box-shadow: 0 8px 18px rgba(19,32,29,.08);
+}
+.google-nav-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(37,99,235,.13); }
 
 .hero {
   position: relative;

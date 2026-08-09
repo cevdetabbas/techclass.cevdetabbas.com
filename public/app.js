@@ -209,6 +209,7 @@ function renderLanding() {
       <header class="topbar">
         <div class="brand"><div class="brand-mark">T</div><span>TechClass</span></div>
         <nav class="nav-actions">
+          <a class="btn google-nav-btn" href="/api/auth/google" aria-label="Continue with Google" title="Continue with Google">G</a>
           <button class="btn ghost" data-action="open-auth" data-mode="login">Sign in</button>
           <button class="btn primary" data-action="open-auth" data-mode="signup">Sign up</button>
         </nav>
