@@ -16,6 +16,14 @@ function readDemoTitle() {
   }
 }
 
+const WEEK_DAYS = [
+  { key: "monday", label: "Monday", short: "Mon" },
+  { key: "tuesday", label: "Tuesday", short: "Tue" },
+  { key: "wednesday", label: "Wednesday", short: "Wed" },
+  { key: "thursday", label: "Thursday", short: "Thu" },
+  { key: "friday", label: "Friday", short: "Fri" },
+];
+
 const state = {
   user: null,
   schedule: null,
@@ -25,6 +33,7 @@ const state = {
   authError: "",
   carousel: 0,
   selectedBlockId: null,
+  selectedWeekDay: "monday",
   simStartedAt: null,
   simStartIndex: 0,
   flashOffsetSeconds: 0,
@@ -56,6 +65,26 @@ const SECTION_IMAGES = [
   "/assets/cls/logout4.png",
   "/assets/cls/abc.jpg",
   "/assets/cls/pbs.png",
+];
+const CLS_MON_THU = [
+  ["Period 1", "07:50", "08:38"],
+  ["Period 2", "08:41", "09:29"],
+  ["Period 3", "09:32", "10:20"],
+  ["Period 4", "10:23", "11:10"],
+  ["Period 5", "11:13", "12:01"],
+  ["Period 6", "12:04", "12:52"],
+  ["Period 7", "12:55", "13:43"],
+  ["Period 8", "13:46", "14:34"],
+  ["Period 9", "14:37", "15:25"],
+];
+const CLS_FRIDAY = [
+  ["Period 1", "07:50", "08:34"],
+  ["Period 2", "08:37", "09:21"],
+  ["Period 3", "09:24", "10:08"],
+  ["Period 4", "10:11", "10:54"],
+  ["Period 5", "10:57", "11:41"],
+  ["Period 6", "11:44", "12:28"],
+  ["Period 7", "12:31", "13:15"],
 ];
 
 function defaultAnnouncement(label, minutes) {
@@ -191,23 +220,36 @@ async function api(path, options = {}) {
 
 function setSchedule(schedule) {
   state.schedule = schedule;
+  ensureWeekSchedule(state.schedule);
   if (!state.selectedBlockId || !schedule.blocks.some((block) => block.id === state.selectedBlockId)) {
     state.selectedBlockId = schedule.blocks[0]?.id || null;
   }
+  if (!state.schedule.week[state.selectedWeekDay]) {
+    state.selectedWeekDay = "monday";
+  }
+}
+
+function currentWeekDayKey(date = new Date()) {
+  return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][date.getDay()];
+}
+
+function blocksForDate(date = new Date()) {
+  const key = currentWeekDayKey(date);
+  return state.schedule?.week?.[key]?.blocks?.length ? state.schedule.week[key].blocks : state.schedule?.blocks || [];
 }
 
 function activeBlock(at = new Date()) {
   const now = at;
   const current = now.getHours() * 60 + now.getMinutes();
-  return state.schedule?.blocks.find((block) => {
+  const blocks = blocksForDate(now);
+  return blocks.find((block) => {
     const [sh, sm] = block.start.split(":").map(Number);
     const [eh, em] = block.end.split(":").map(Number);
     return current >= sh * 60 + sm && current < eh * 60 + em;
-  }) || state.schedule?.blocks[0];
+  }) || blocks[0] || state.schedule?.blocks[0];
 }
 
-function nextBlock(block) {
-  const blocks = state.schedule?.blocks || [];
+function nextBlock(block, blocks = blocksForDate()) {
   const index = blocks.findIndex((item) => item.id === block?.id);
   return blocks[index + 1] || blocks[0];
 }
@@ -287,6 +329,62 @@ function clsSegmentsForBlock(block) {
     { id: `seg-${Date.now()}-2`, label: "Typing", minutes: typing, color: block.color, imageUrl: SECTION_IMAGES[2] },
     { id: `seg-${Date.now()}-3`, label: "Logout", minutes: logout, color: block.color, imageUrl: SECTION_IMAGES[4] },
   ];
+}
+
+function cloneBlockForWeek(block, index = 0) {
+  const color = block.color || ["#2563eb", "#0f766e", "#9333ea", "#d97706", "#dc2626"][index % 5];
+  const copy = {
+    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: block.label || `Block ${index + 1}`,
+    start: block.start || "08:00",
+    end: block.end || "08:30",
+    kind: block.kind || "class",
+    color,
+  };
+  copy.segments = Array.isArray(block.segments) && block.segments.length
+    ? block.segments.slice(0, MAX_SECTIONS).map((segment, segmentIndex) => ({
+      id: `seg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: segment.label || `Section ${segmentIndex + 1}`,
+      minutes: Math.max(1, Math.min(240, Number(segment.minutes || 5))),
+      color: segment.color || color,
+      imageUrl: segment.imageUrl || SECTION_IMAGES[segmentIndex % SECTION_IMAGES.length],
+    }))
+    : clsSegmentsForBlock(copy);
+  return copy;
+}
+
+function createClsBlock([label, start, end], index) {
+  const color = ["#2563eb", "#0f766e", "#9333ea", "#d97706", "#dc2626", "#0891b2", "#4f46e5", "#16a34a"][index % 8];
+  const block = { id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, label, start, end, kind: "class", color };
+  return { ...block, segments: clsSegmentsForBlock(block) };
+}
+
+function createClsWeekSchedule() {
+  return WEEK_DAYS.reduce((week, day) => {
+    const template = day.key === "friday" ? CLS_FRIDAY : CLS_MON_THU;
+    week[day.key] = { label: day.label, blocks: template.map(createClsBlock) };
+    return week;
+  }, {});
+}
+
+function weekFromDailyBlocks(blocks) {
+  return WEEK_DAYS.reduce((week, day) => {
+    week[day.key] = { label: day.label, blocks: blocks.map((block, index) => cloneBlockForWeek(block, index)) };
+    return week;
+  }, {});
+}
+
+function ensureWeekSchedule(schedule) {
+  if (!schedule.week || typeof schedule.week !== "object") {
+    schedule.week = weekFromDailyBlocks(schedule.blocks || []);
+  }
+  WEEK_DAYS.forEach((day) => {
+    if (!schedule.week[day.key]) {
+      schedule.week[day.key] = { label: day.label, blocks: (schedule.blocks || []).map((block, index) => cloneBlockForWeek(block, index)) };
+    }
+    schedule.week[day.key].label = day.label;
+    schedule.week[day.key].blocks = Array.isArray(schedule.week[day.key].blocks) ? schedule.week[day.key].blocks : [];
+  });
 }
 
 function selectedBlock() {
@@ -664,9 +762,10 @@ function renderScheduleView() {
               ${["aurora", "matrix", "sunrise", "chalk", "orbit"].map((theme) => `<button class="theme-btn ${theme} ${schedule.theme.background === theme ? "active" : ""}" data-action="theme" data-theme="${theme}">${theme}</button>`).join("")}
             </div>
           </div>
-          ${renderDisplayView(selected || activeBlock(), nextBlock(selected || activeBlock()), true)}
+          ${renderDisplayView(selected || activeBlock(), nextBlock(selected || activeBlock(), selected ? schedule.blocks : blocksForDate()), true)}
         </section>
       </div>
+      ${renderWeeklyScheduleEditor()}
       ${renderAssistantNudge()}
     </div>
   `;
@@ -690,6 +789,59 @@ function renderBlockRow(block) {
       <input value="${escapeHtml(block.label)}" data-block-field="label">
       <input type="color" value="${escapeHtml(block.color)}" data-block-field="color">
       <button class="icon-btn" title="Delete block" data-action="delete-block">x</button>
+    </div>
+  `;
+}
+
+function renderWeeklyScheduleEditor() {
+  const selectedDay = WEEK_DAYS.find((day) => day.key === state.selectedWeekDay) || WEEK_DAYS[0];
+  const dayBlocks = state.schedule.week?.[selectedDay.key]?.blocks || [];
+  return `
+    <section class="panel weekly-panel">
+      <div class="weekly-head">
+        <div>
+          <h2>Weekly schedule</h2>
+          <p class="muted">CLS-style weekday planning with editable day blocks.</p>
+        </div>
+        <div class="weekly-actions">
+          <button class="btn small" data-action="week-from-daily">Copy bell schedule to week</button>
+          <button class="btn small" data-action="use-cls-week">Use CLS week</button>
+          <button class="btn small blue" data-action="week-day-to-bell">Use ${escapeHtml(selectedDay.short)} as bell schedule</button>
+        </div>
+      </div>
+      <div class="weekly-board">
+        ${WEEK_DAYS.map((day) => {
+          const blocks = state.schedule.week?.[day.key]?.blocks || [];
+          return `
+            <button class="weekly-day-card ${day.key === selectedDay.key ? "active" : ""}" data-action="select-week-day" data-week-day="${escapeHtml(day.key)}">
+              <span>${escapeHtml(day.short)}</span>
+              <strong>${blocks.length} blocks</strong>
+              <em>${escapeHtml(blocks[0]?.start || "--:--")} - ${escapeHtml(blocks.at(-1)?.end || "--:--")}</em>
+            </button>
+          `;
+        }).join("")}
+      </div>
+      <div class="weekly-editor">
+        <div class="weekly-editor-head">
+          <strong>${escapeHtml(selectedDay.label)}</strong>
+          <button class="btn small" data-action="add-week-block">Add block</button>
+        </div>
+        <div class="weekly-block-list">
+          ${dayBlocks.map((block) => renderWeekBlockRow(selectedDay.key, block)).join("") || `<p class="muted">No blocks yet for ${escapeHtml(selectedDay.label)}.</p>`}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderWeekBlockRow(dayKey, block) {
+  return `
+    <div class="week-row" data-week-day="${escapeHtml(dayKey)}" data-week-block-id="${escapeHtml(block.id)}">
+      <input type="time" value="${escapeHtml(block.start)}" data-week-block-field="start" aria-label="Start time">
+      <input type="time" value="${escapeHtml(block.end)}" data-week-block-field="end" aria-label="End time">
+      <input value="${escapeHtml(block.label)}" data-week-block-field="label" aria-label="Class label">
+      <input type="color" value="${escapeHtml(block.color)}" data-week-block-field="color" aria-label="Class color">
+      <button class="icon-btn" title="Delete weekly block" data-action="delete-week-block">x</button>
     </div>
   `;
 }
@@ -952,33 +1104,33 @@ function renderDemoSessionCard(session, index, display) {
 
 function renderAssistantView() {
   return `
-    <div class="grid">
-      <section class="panel">
-        <h2>Targeted setup assistant</h2>
-        <div class="chat-log">
-          ${state.assistantMessages.map((message) => `<div class="message ${escapeHtml(message.role)}">${escapeHtml(message.content)}</div>`).join("")}
-          ${!state.assistantMessages.length ? `<div class="message assistant">Paste a bell schedule or ask me to split each class into classroom sections.</div>` : ""}
+    <section class="panel assistant-workspace">
+      <form class="assistant-prompt" data-assistant-form>
+        <div>
+          <h2>Schedule assistant</h2>
+          <p class="muted">Paste a daily or weekly schedule, or ask for CLS sections, theme changes, or the CLS weekly template.</p>
         </div>
-        <form data-assistant-form>
-          <div class="field">
-            <label>Paste schedule or instruction</label>
-            <textarea name="message" placeholder="8:00-8:15 Arrival&#10;8:15-9:00 Digital Lab&#10;Split every class into mini lesson, practice, and exit ticket"></textarea>
-          </div>
-          <button class="btn blue" type="submit">Draft changes</button>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>Draft</h2>
-        ${state.draftPatch ? `
-          <div class="draft-panel">
-            <p>${escapeHtml(state.draftPatch.reply)}</p>
-            <button class="btn blue" data-action="apply-draft">Apply draft</button>
-            <button class="btn" data-action="clear-draft">Clear</button>
-          </div>
-          ${renderDraftSummary(state.draftPatch.patch?.schedule)}
-        ` : `<p class="muted">Assistant drafts will appear here before they change your saved schedule.</p>`}
-      </section>
-    </div>
+        <textarea name="message" placeholder="Monday:&#10;8:00-8:45 Digital Lab&#10;8:50-9:30 Typing&#10;&#10;Friday:&#10;8:00-8:35 Digital Lab&#10;&#10;Or: use CLS weekly schedule"></textarea>
+        <button class="btn blue" type="submit">Draft</button>
+      </form>
+      <div class="conversation-box">
+        <div class="chat-log assistant-chat-log">
+          ${!state.assistantMessages.length ? `<div class="message assistant">Ready. I can draft schedule changes, weekly plans, sections, and display themes. You review before applying.</div>` : ""}
+          ${state.assistantMessages.map((message) => `<div class="message ${escapeHtml(message.role)}">${escapeHtml(message.content)}</div>`).join("")}
+          ${state.draftPatch ? `
+            <div class="message assistant draft-message">
+              <strong>Draft ready</strong>
+              <p>${escapeHtml(state.draftPatch.reply)}</p>
+              ${renderDraftSummary(state.draftPatch.patch?.schedule)}
+              <div class="draft-actions">
+                <button class="btn blue" data-action="apply-draft">Apply and save</button>
+                <button class="btn" data-action="clear-draft">Clear</button>
+              </div>
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -987,8 +1139,9 @@ function renderDraftSummary(schedule) {
     return "";
   }
   return `
-    <div class="section-list">
-      ${schedule.blocks.slice(0, 8).map((block) => `<div class="message assistant"><strong>${escapeHtml(block.start)}-${escapeHtml(block.end)}</strong> ${escapeHtml(block.label)}</div>`).join("")}
+    <div class="draft-summary">
+      ${schedule.blocks.slice(0, 6).map((block) => `<div><strong>${escapeHtml(block.start)}-${escapeHtml(block.end)}</strong><span>${escapeHtml(block.label)}</span></div>`).join("")}
+      ${schedule.week ? `<p>${WEEK_DAYS.map((day) => `${day.short}: ${schedule.week[day.key]?.blocks?.length || 0}`).join(" | ")}</p>` : ""}
     </div>
   `;
 }
@@ -1117,6 +1270,50 @@ function readDemoImageFile(file, onLoad) {
   reader.onload = () => onLoad(String(reader.result || ""));
   reader.readAsDataURL(file);
   return true;
+}
+
+function updateWeekBlock(dayKey, blockId, field, value) {
+  const day = state.schedule.week?.[dayKey];
+  if (!day) {
+    return;
+  }
+  day.blocks = day.blocks.map((block) => {
+    if (block.id !== blockId) {
+      return block;
+    }
+    const next = { ...block, [field]: value };
+    if (field === "color") {
+      next.segments = (next.segments || []).map((segment) => ({ ...segment, color: value }));
+    }
+    return next;
+  }).sort((a, b) => timeToSeconds(a.start) - timeToSeconds(b.start));
+}
+
+function addWeekBlock(dayKey) {
+  const day = state.schedule.week?.[dayKey];
+  if (!day) {
+    return;
+  }
+  const prior = day.blocks.at(-1);
+  const start = prior?.end || "08:00";
+  const endMinutes = Math.min(23 * 60 + 59, Math.floor((timeToSeconds(start) + 30 * 60) / 60));
+  const block = {
+    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: `New ${day.label} block`,
+    start,
+    end: `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`,
+    kind: "class",
+    color: "#2563eb",
+  };
+  day.blocks.push({ ...block, segments: clsSegmentsForBlock(block) });
+}
+
+function deleteWeekBlock(dayKey, blockId) {
+  const day = state.schedule.week?.[dayKey];
+  if (!day) {
+    return;
+  }
+  day.blocks = day.blocks.filter((block) => block.id !== blockId);
 }
 
 async function bootstrap() {
@@ -1346,6 +1543,35 @@ app.addEventListener("click", async (event) => {
     state.selectedBlockId = button.value;
     renderApp();
   }
+  if (action === "select-week-day") {
+    state.selectedWeekDay = button.dataset.weekDay || "monday";
+    renderApp();
+  }
+  if (action === "week-from-daily") {
+    state.schedule.week = weekFromDailyBlocks(state.schedule.blocks);
+    renderApp();
+  }
+  if (action === "use-cls-week") {
+    state.schedule.week = createClsWeekSchedule();
+    renderApp();
+  }
+  if (action === "week-day-to-bell") {
+    const blocks = state.schedule.week?.[state.selectedWeekDay]?.blocks || [];
+    state.schedule.blocks = blocks.map((block, index) => cloneBlockForWeek(block, index));
+    state.selectedBlockId = state.schedule.blocks[0]?.id || null;
+    renderApp();
+  }
+  if (action === "add-week-block") {
+    addWeekBlock(state.selectedWeekDay);
+    renderApp();
+  }
+  if (action === "delete-week-block") {
+    const row = button.closest("[data-week-block-id]");
+    if (row) {
+      deleteWeekBlock(row.dataset.weekDay, row.dataset.weekBlockId);
+      renderApp();
+    }
+  }
   if (action === "add-section") {
     const blockId = button.dataset.blockId;
     state.schedule.blocks = state.schedule.blocks.map((block) => block.id === blockId ? {
@@ -1410,7 +1636,7 @@ app.addEventListener("click", async (event) => {
       setSchedule(state.draftPatch.patch.schedule);
       state.draftPatch = null;
       state.view = "schedule";
-      renderApp();
+      await saveSchedule();
     }
   }
   if (action === "clear-draft") {
@@ -1435,6 +1661,12 @@ app.addEventListener("input", (event) => {
     const row = input.closest("[data-segment-id]");
     updateSegment(row.dataset.blockId, row.dataset.segmentId, input.dataset.segmentField, input.value);
   }
+  if (input.matches("[data-week-block-field]")) {
+    const row = input.closest("[data-week-block-id]");
+    if (row) {
+      updateWeekBlock(row.dataset.weekDay, row.dataset.weekBlockId, input.dataset.weekBlockField, input.value);
+    }
+  }
   if (input.matches("[data-demo-field]")) {
     const row = input.closest("[data-demo-session-id]");
     if (row) {
@@ -1458,6 +1690,10 @@ app.addEventListener("input", (event) => {
 
 app.addEventListener("change", (event) => {
   const input = event.target;
+  if (input.matches("[data-week-block-field]")) {
+    renderApp();
+    return;
+  }
   if (input.matches("[data-public-demo-image-upload]")) {
     const row = input.closest("[data-public-demo-session-id]");
     const file = input.files?.[0];

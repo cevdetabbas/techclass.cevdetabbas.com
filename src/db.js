@@ -71,6 +71,7 @@ export function initDb() {
     );
   `);
   migrateUsersTable();
+  migrateSchedulesTable();
 }
 
 function database() {
@@ -92,6 +93,12 @@ function migrateUsersTable() {
     db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL");
+}
+
+function migrateSchedulesTable() {
+  if (!hasColumn("schedules", "week_json")) {
+    db.exec("ALTER TABLE schedules ADD COLUMN week_json TEXT");
+  }
 }
 
 export function createUser({ name, email, passwordHash }) {
@@ -195,7 +202,7 @@ export function deleteExpiredSessions() {
 
 export function getSchedule(userId) {
   const row = database()
-    .prepare("SELECT title, timezone, blocks_json, theme_json, updated_at FROM schedules WHERE user_id = ?")
+    .prepare("SELECT title, timezone, blocks_json, theme_json, week_json, updated_at FROM schedules WHERE user_id = ?")
     .get(userId);
   if (!row) {
     const schedule = defaultSchedule("My TechClass");
@@ -207,6 +214,7 @@ export function getSchedule(userId) {
     timezone: row.timezone,
     blocks: fromJson(row.blocks_json, []),
     theme: fromJson(row.theme_json, {}),
+    week: fromJson(row.week_json, null),
     updatedAt: row.updated_at,
   });
 }
@@ -216,13 +224,14 @@ export function saveSchedule(userId, scheduleInput) {
   const timestamp = nowIso();
   database()
     .prepare(`
-      INSERT INTO schedules (user_id, title, timezone, blocks_json, theme_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO schedules (user_id, title, timezone, blocks_json, theme_json, week_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         title = excluded.title,
         timezone = excluded.timezone,
         blocks_json = excluded.blocks_json,
         theme_json = excluded.theme_json,
+        week_json = excluded.week_json,
         updated_at = excluded.updated_at
     `)
     .run(
@@ -231,6 +240,7 @@ export function saveSchedule(userId, scheduleInput) {
       schedule.timezone,
       asJson(schedule.blocks),
       asJson(schedule.theme),
+      asJson(schedule.week),
       timestamp,
       timestamp,
     );
