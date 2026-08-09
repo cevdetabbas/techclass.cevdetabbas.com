@@ -8,6 +8,14 @@ function readSidebarPreference() {
   }
 }
 
+function readDemoTitle() {
+  try {
+    return String(localStorage.getItem("techclass_demo_title") || "TechClass Demo").trim().slice(0, 60) || "TechClass Demo";
+  } catch {
+    return "TechClass Demo";
+  }
+}
+
 const state = {
   user: null,
   schedule: null,
@@ -20,6 +28,7 @@ const state = {
   simStartedAt: null,
   simStartIndex: 0,
   flashOffsetSeconds: 0,
+  demoTitle: readDemoTitle(),
   demoSessions: [],
   demoRunning: false,
   demoMuted: false,
@@ -115,6 +124,14 @@ function writeDemoSessions() {
     localStorage.setItem("techclass_demo_sessions", JSON.stringify(state.demoSessions));
   } catch {
     // Demo edits still work for the current page even when storage is unavailable.
+  }
+}
+
+function writeDemoTitle() {
+  try {
+    localStorage.setItem("techclass_demo_title", state.demoTitle);
+  } catch {
+    // Title edits still work for the current page even when storage is unavailable.
   }
 }
 
@@ -862,7 +879,7 @@ function renderDemoView() {
       <div class="display-head demo-head">
         <div>
           <div class="eyebrow">Demo draft</div>
-          <h2>Four-session flow</h2>
+          <h2><input class="demo-title-input" value="${escapeHtml(state.demoTitle)}" data-demo-title aria-label="Demo title"></h2>
           <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
           ${renderLiveAnnouncement(demo)}
         </div>
@@ -870,13 +887,13 @@ function renderDemoView() {
           <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
           <div class="demo-controls">
             <button class="demo-control ${state.demoRunning ? "active" : ""}" data-action="demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
-            <button class="demo-control" data-action="demo-stop" aria-label="Stop demo" title="Stop"><span class="stop-icon"></span></button>
+            <button class="demo-control" data-action="demo-pause" aria-label="Pause demo" title="Pause"><span class="pause-icon"></span></button>
+            <button class="demo-control" data-action="demo-reset" aria-label="Reset demo" title="Reset"><span class="reset-icon"></span></button>
             <button class="demo-control ${state.demoMuted ? "muted" : ""}" data-action="demo-mute" aria-pressed="${state.demoMuted}" aria-label="${state.demoMuted ? "Unmute announcements" : "Mute announcements"}" title="${state.demoMuted ? "Unmute announcements" : "Mute announcements"}"><span class="sound-icon ${state.demoMuted ? "muted" : ""}"><span></span></span></button>
-            <button class="demo-add" data-action="demo-add-session" aria-label="Add session" title="Add session">+</button>
           </div>
         </div>
       </div>
-      <div class="session-grid demo-session-grid count-${Math.max(1, demo.sessions.length)}">
+      <div class="session-grid demo-session-grid demo-session-track count-${Math.max(1, demo.sessions.length)}">
         ${demo.sessions.map((session, index) => {
           const duration = Math.max(1, Number(session.minutes || 1)) * 60;
           const done = demo.elapsed >= cursor + duration;
@@ -887,6 +904,7 @@ function renderDemoView() {
           cursor += duration;
           return renderDemoSessionCard(session, index, { active, done, timer, ringOffset, spinning: active && state.demoRunning });
         }).join("")}
+        <button class="public-demo-add-tile demo-add-tile" data-action="demo-add-session" aria-label="Add session" title="Add session">+</button>
       </div>
     </section>
   `;
@@ -1251,10 +1269,18 @@ app.addEventListener("click", async (event) => {
     renderApp();
     announceActiveDemo();
   }
-  if (action === "demo-stop") {
+  if (action === "demo-stop" || action === "demo-pause") {
     state.demoElapsedSeconds = currentDemoElapsedSeconds();
     state.demoStartedAt = null;
     state.demoRunning = false;
+    stopAnnouncementAudio();
+    renderApp();
+  }
+  if (action === "demo-reset") {
+    state.demoElapsedSeconds = 0;
+    state.demoStartedAt = null;
+    state.demoRunning = false;
+    state.demoAnnouncedSessionId = null;
     stopAnnouncementAudio();
     renderApp();
   }
@@ -1415,6 +1441,10 @@ app.addEventListener("input", (event) => {
       updateDemoSession(row.dataset.demoSessionId, input.dataset.demoField, input.value);
     }
   }
+  if (input.matches("[data-demo-title]")) {
+    state.demoTitle = input.value.slice(0, 60);
+    writeDemoTitle();
+  }
   if (input.matches("[data-public-demo-field]")) {
     const row = input.closest("[data-public-demo-session-id]");
     if (row) {
@@ -1563,6 +1593,9 @@ setInterval(() => {
     return;
   }
   if (document.activeElement?.matches("[data-demo-field]")) {
+    return;
+  }
+  if (document.activeElement?.matches("[data-demo-title]")) {
     return;
   }
   if (currentDemoElapsedSeconds() >= demoTotalSeconds()) {

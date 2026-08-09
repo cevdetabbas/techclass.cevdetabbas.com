@@ -390,7 +390,8 @@ h1 {
   color: #fff;
   text-shadow: 0 9px 28px rgba(0,0,0,.3);
 }
-.public-demo-title-input {
+.public-demo-title-input,
+.demo-title-input {
   width: min(620px, 100%);
   border: 1px solid transparent;
   border-radius: 8px;
@@ -402,15 +403,22 @@ h1 {
   line-height: .95;
   text-shadow: inherit;
 }
-.public-demo-title-input:hover {
+.public-demo-title-input:hover,
+.demo-title-input:hover {
   border-color: rgba(255,255,255,.28);
   background: rgba(255,255,255,.08);
 }
-.public-demo-title-input:focus {
+.public-demo-title-input:focus,
+.demo-title-input:focus {
   outline: none;
   border-color: rgba(255,255,255,.72);
   background: rgba(15,23,42,.24);
   box-shadow: 0 0 0 4px rgba(255,255,255,.16);
+}
+.demo-title-input {
+  width: min(560px, 100%);
+  margin: 0;
+  font-size: inherit;
 }
 .public-demo-track {
   position: relative;
@@ -1048,6 +1056,23 @@ h1 {
   line-height: 1;
 }
 .demo-session-grid { align-items: stretch; }
+.demo-session-track {
+  display: flex;
+  align-items: stretch;
+  gap: clamp(12px, 1.6vw, 20px);
+}
+.demo-session-track .demo-session-card {
+  flex: 1 1 178px;
+  min-width: 164px;
+  min-height: 410px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.demo-add-tile {
+  flex: 0 0 52px;
+  min-height: 410px;
+}
 .demo-session-card { padding-top: 30px; }
 .demo-session-card:hover,
 .demo-session-card:focus-within { z-index: 30; }
@@ -1323,11 +1348,14 @@ h1 {
   .slide-art { aspect-ratio: 16 / 10; }
   .public-demo-main { padding: 92px 18px 22px; }
   .public-demo-track { flex-wrap: wrap; }
+  .demo-session-track { flex-wrap: wrap; }
   .public-demo-session-card { flex-basis: calc(50% - 40px); min-height: 360px; }
+  .demo-session-track .demo-session-card { flex-basis: calc(50% - 40px); min-height: 360px; }
   .public-demo-add-tile {
     flex: 0 0 52px;
     min-height: 360px;
   }
+  .demo-add-tile { min-height: 360px; }
   .app-shell { grid-template-columns: 1fr; }
   .app-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .sidebar { position: sticky; top: 0; z-index: 10; }
@@ -1371,11 +1399,16 @@ h1 {
     flex: 1 1 100%;
     min-height: 350px;
   }
+  .demo-session-track .demo-session-card {
+    flex: 1 1 100%;
+    min-height: 350px;
+  }
   .public-demo-add-tile {
     flex: 1 1 100%;
     min-height: 58px;
     border-radius: 8px;
   }
+  .demo-add-tile { min-height: 58px; }
   .app-head { grid-template-columns: 1fr; }
   .app-title-block { text-align: left; }
   .head-metric.align-right { justify-content: flex-start; }
