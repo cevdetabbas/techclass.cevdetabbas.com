@@ -22,13 +22,17 @@ const state = {
   flashOffsetSeconds: 0,
   demoSessions: [],
   demoRunning: false,
+  demoMuted: false,
   demoStartedAt: null,
   demoElapsedSeconds: 0,
+  demoAnnouncedSessionId: null,
   publicDemoSessions: [],
   publicDemoTitle: "TechClass Demo",
   publicDemoRunning: false,
+  publicDemoMuted: false,
   publicDemoStartedAt: null,
   publicDemoElapsedSeconds: 0,
+  publicDemoAnnouncedSessionId: null,
   assistantMessages: [],
   draftPatch: null,
 };
@@ -60,6 +64,13 @@ function defaultAnnouncement(label, minutes) {
     return "The class is over. Please log out and prepare to leave.";
   }
   return `${label} session started. This session will take ${minutes} minutes.`;
+}
+
+function announcementText(session, fallbackIndex = 0) {
+  if (!session) {
+    return "";
+  }
+  return String(session.announcement || defaultAnnouncement(session.label || `Session ${fallbackIndex + 1}`, session.minutes || 5)).trim();
 }
 
 function createDemoSession(label, minutes, imageUrl = randomSectionImage(), announcement = defaultAnnouncement(label, minutes)) {
@@ -424,6 +435,51 @@ function publicDemoDisplayState() {
   return { sessions, total, elapsed, activeIndex, overallTimer: formatSeconds(total - elapsed), status };
 }
 
+function renderLiveAnnouncement(demo) {
+  const session = demo.sessions[demo.activeIndex];
+  const text = announcementText(session, demo.activeIndex);
+  if (!session || !text) {
+    return "";
+  }
+  return `
+    <div class="live-announcement" aria-live="polite">
+      <span>Announcement</span>
+      <p>${escapeHtml(text)}</p>
+    </div>
+  `;
+}
+
+function stopAnnouncementAudio() {
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function speakAnnouncement(text) {
+  const message = String(text || "").trim();
+  if (!message || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance !== "function") {
+    return;
+  }
+  stopAnnouncementAudio();
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.rate = 0.94;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  window.speechSynthesis.speak(utterance);
+}
+
+function announceActivePublicDemo(demo = publicDemoDisplayState()) {
+  const session = demo.sessions[demo.activeIndex];
+  if (!state.publicDemoRunning || state.publicDemoMuted || !session) {
+    return;
+  }
+  if (state.publicDemoAnnouncedSessionId === session.id) {
+    return;
+  }
+  state.publicDemoAnnouncedSessionId = session.id;
+  speakAnnouncement(announcementText(session, demo.activeIndex));
+}
+
 function spinOffsetStyle(active) {
   return active ? ` style="--spin-offset:${((Date.now() % 4000) / 1000).toFixed(3)}s"` : "";
 }
@@ -448,6 +504,7 @@ function renderPublicDemoPage() {
               <div class="eyebrow">Live demo</div>
               <h1><input class="public-demo-title-input" value="${escapeHtml(state.publicDemoTitle)}" data-public-demo-title aria-label="Demo title"></h1>
               <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
+              ${renderLiveAnnouncement(demo)}
             </div>
             <div class="demo-toolbar">
               <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
@@ -455,6 +512,7 @@ function renderPublicDemoPage() {
                 <button class="demo-control ${state.publicDemoRunning ? "active" : ""}" data-action="public-demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
                 <button class="demo-control" data-action="public-demo-pause" aria-label="Pause demo" title="Pause"><span class="pause-icon"></span></button>
                 <button class="demo-control" data-action="public-demo-reset" aria-label="Reset demo" title="Reset"><span class="reset-icon"></span></button>
+                <button class="demo-control ${state.publicDemoMuted ? "muted" : ""}" data-action="public-demo-mute" aria-pressed="${state.publicDemoMuted}" aria-label="${state.publicDemoMuted ? "Unmute announcements" : "Mute announcements"}" title="${state.publicDemoMuted ? "Unmute announcements" : "Mute announcements"}"><span class="sound-icon ${state.publicDemoMuted ? "muted" : ""}"><span></span></span></button>
               </div>
             </div>
           </div>
@@ -783,6 +841,18 @@ function demoDisplayState() {
   return { sessions, total, elapsed, activeIndex, overallTimer: formatSeconds(total - elapsed), status };
 }
 
+function announceActiveDemo(demo = demoDisplayState()) {
+  const session = demo.sessions[demo.activeIndex];
+  if (!state.demoRunning || state.demoMuted || !session) {
+    return;
+  }
+  if (state.demoAnnouncedSessionId === session.id) {
+    return;
+  }
+  state.demoAnnouncedSessionId = session.id;
+  speakAnnouncement(announcementText(session, demo.activeIndex));
+}
+
 function renderDemoView() {
   const theme = state.schedule.theme.background;
   const demo = demoDisplayState();
@@ -794,12 +864,14 @@ function renderDemoView() {
           <div class="eyebrow">Demo draft</div>
           <h2>Four-session flow</h2>
           <p>${escapeHtml(demo.status)} - ${demo.sessions.length} sessions</p>
+          ${renderLiveAnnouncement(demo)}
         </div>
         <div class="demo-toolbar">
           <div class="slot-timer">${escapeHtml(demo.overallTimer)}</div>
           <div class="demo-controls">
             <button class="demo-control ${state.demoRunning ? "active" : ""}" data-action="demo-play" aria-label="Play demo" title="Play"><span class="play-icon"></span></button>
             <button class="demo-control" data-action="demo-stop" aria-label="Stop demo" title="Stop"><span class="stop-icon"></span></button>
+            <button class="demo-control ${state.demoMuted ? "muted" : ""}" data-action="demo-mute" aria-pressed="${state.demoMuted}" aria-label="${state.demoMuted ? "Unmute announcements" : "Mute announcements"}" title="${state.demoMuted ? "Unmute announcements" : "Mute announcements"}"><span class="sound-icon ${state.demoMuted ? "muted" : ""}"><span></span></span></button>
             <button class="demo-add" data-action="demo-add-session" aria-label="Add session" title="Add session">+</button>
           </div>
         </div>
@@ -960,6 +1032,9 @@ function updateDemoSession(sessionId, field, value) {
     }
     if (field === "announcement") {
       changed = true;
+      if (state.demoAnnouncedSessionId === sessionId) {
+        state.demoAnnouncedSessionId = null;
+      }
       return { ...session, announcement: String(value || "").slice(0, 600) };
     }
     if (field === "imageUrl") {
@@ -989,6 +1064,9 @@ function updatePublicDemoSession(sessionId, field, value) {
       return Number.isFinite(minutes) ? { ...session, minutes } : session;
     }
     if (field === "announcement") {
+      if (state.publicDemoAnnouncedSessionId === sessionId) {
+        state.publicDemoAnnouncedSessionId = null;
+      }
       return { ...session, announcement: String(value || "").slice(0, 600) };
     }
     if (field === "imageUrl") {
@@ -1089,33 +1167,53 @@ app.addEventListener("click", async (event) => {
   if (action === "public-demo-home") {
     state.publicDemoRunning = false;
     state.publicDemoStartedAt = null;
+    state.publicDemoAnnouncedSessionId = null;
+    stopAnnouncementAudio();
     window.history.pushState({}, "", "/");
     renderLanding();
   }
   if (action === "public-demo-play") {
     const total = publicDemoTotalSeconds();
     const elapsed = currentPublicDemoElapsedSeconds();
+    if (elapsed >= total) {
+      state.publicDemoAnnouncedSessionId = null;
+    }
     state.publicDemoElapsedSeconds = elapsed >= total ? 0 : elapsed;
     state.publicDemoStartedAt = Date.now();
     state.publicDemoRunning = true;
     renderPublicDemoPage();
+    announceActivePublicDemo();
   }
   if (action === "public-demo-pause") {
     state.publicDemoElapsedSeconds = currentPublicDemoElapsedSeconds();
     state.publicDemoStartedAt = null;
     state.publicDemoRunning = false;
+    stopAnnouncementAudio();
     renderPublicDemoPage();
   }
   if (action === "public-demo-reset") {
     state.publicDemoElapsedSeconds = 0;
     state.publicDemoStartedAt = null;
     state.publicDemoRunning = false;
+    state.publicDemoAnnouncedSessionId = null;
+    stopAnnouncementAudio();
     renderPublicDemoPage();
+  }
+  if (action === "public-demo-mute") {
+    state.publicDemoMuted = !state.publicDemoMuted;
+    if (state.publicDemoMuted) {
+      stopAnnouncementAudio();
+    } else {
+      state.publicDemoAnnouncedSessionId = null;
+    }
+    renderPublicDemoPage();
+    announceActivePublicDemo();
   }
   if (action === "public-demo-add-session") {
     clampPublicDemoElapsed();
     const index = state.publicDemoSessions.length;
     state.publicDemoSessions.push(createDemoSession(`Session ${index + 1}`, 5, SECTION_IMAGES[index % SECTION_IMAGES.length]));
+    state.publicDemoAnnouncedSessionId = null;
     renderPublicDemoPage();
   }
   if (action === "public-demo-delete-session") {
@@ -1124,6 +1222,7 @@ app.addEventListener("click", async (event) => {
       clampPublicDemoElapsed();
       state.publicDemoSessions = state.publicDemoSessions.filter((session) => session.id !== card.dataset.publicDemoSessionId);
       clampPublicDemoElapsed();
+      state.publicDemoAnnouncedSessionId = null;
       renderPublicDemoPage();
     }
   }
@@ -1143,21 +1242,37 @@ app.addEventListener("click", async (event) => {
   if (action === "demo-play") {
     const total = demoTotalSeconds();
     const elapsed = currentDemoElapsedSeconds();
+    if (elapsed >= total) {
+      state.demoAnnouncedSessionId = null;
+    }
     state.demoElapsedSeconds = elapsed >= total ? 0 : elapsed;
     state.demoStartedAt = Date.now();
     state.demoRunning = true;
     renderApp();
+    announceActiveDemo();
   }
   if (action === "demo-stop") {
     state.demoElapsedSeconds = currentDemoElapsedSeconds();
     state.demoStartedAt = null;
     state.demoRunning = false;
+    stopAnnouncementAudio();
     renderApp();
+  }
+  if (action === "demo-mute") {
+    state.demoMuted = !state.demoMuted;
+    if (state.demoMuted) {
+      stopAnnouncementAudio();
+    } else {
+      state.demoAnnouncedSessionId = null;
+    }
+    renderApp();
+    announceActiveDemo();
   }
   if (action === "demo-add-session") {
     clampDemoElapsed();
     const index = state.demoSessions.length;
     state.demoSessions.push(createDemoSession(`Session ${index + 1}`, 5, SECTION_IMAGES[index % SECTION_IMAGES.length]));
+    state.demoAnnouncedSessionId = null;
     writeDemoSessions();
     renderApp();
   }
@@ -1167,6 +1282,7 @@ app.addEventListener("click", async (event) => {
       clampDemoElapsed();
       state.demoSessions = state.demoSessions.filter((session) => session.id !== card.dataset.demoSessionId);
       clampDemoElapsed();
+      state.demoAnnouncedSessionId = null;
       writeDemoSessions();
       renderApp();
     }
@@ -1436,8 +1552,10 @@ setInterval(() => {
     state.publicDemoElapsedSeconds = publicDemoTotalSeconds();
     state.publicDemoStartedAt = null;
     state.publicDemoRunning = false;
+    stopAnnouncementAudio();
   }
   renderPublicDemoPage();
+  announceActivePublicDemo();
 }, 1000);
 
 setInterval(() => {
@@ -1451,8 +1569,10 @@ setInterval(() => {
     state.demoElapsedSeconds = demoTotalSeconds();
     state.demoStartedAt = null;
     state.demoRunning = false;
+    stopAnnouncementAudio();
   }
   renderApp();
+  announceActiveDemo();
 }, 1000);
 
 setInterval(() => {

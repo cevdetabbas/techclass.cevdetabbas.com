@@ -949,6 +949,11 @@ h1 {
   background: var(--mode-accent);
   border-color: var(--mode-accent);
 }
+.demo-control.muted {
+  color: #fff;
+  background: #13201d;
+  border-color: #13201d;
+}
 .play-icon {
   width: 0;
   height: 0;
@@ -996,6 +1001,47 @@ h1 {
   border-left: 7px solid currentColor;
   transform: rotate(-22deg);
 }
+.sound-icon {
+  position: relative;
+  display: block;
+  width: 21px;
+  height: 18px;
+}
+.sound-icon::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 5px;
+  width: 6px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(0 20%, 42% 20%, 100% 0, 100% 100%, 42% 80%, 0 80%);
+}
+.sound-icon::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  top: 3px;
+  width: 8px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+}
+.sound-icon span {
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform: rotate(-42deg);
+  transform-origin: center;
+}
+.sound-icon.muted::after { opacity: .28; }
+.sound-icon.muted span { opacity: 1; }
 .demo-add {
   font-size: 24px;
   font-weight: 950;
@@ -1035,13 +1081,22 @@ h1 {
   display: inline-block;
   max-width: 100%;
 }
+.demo-meta-wrap::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -18px;
+  right: -18px;
+  height: 16px;
+}
 .demo-meta-wrap .session-info {
   margin-bottom: 7px;
   cursor: text;
 }
 .announcement-popover {
   position: absolute;
-  top: calc(100% + 8px);
+  z-index: 3;
+  top: calc(100% + 6px);
   left: 50%;
   width: min(276px, calc(100vw - 44px));
   padding: 12px;
@@ -1103,6 +1158,33 @@ h1 {
   outline: none;
   border-color: var(--mode-accent);
   box-shadow: 0 0 0 3px rgba(var(--mode-accent-rgb),.13);
+}
+.live-announcement {
+  width: min(520px, 100%);
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255,255,255,.86);
+  border: 1px solid rgba(255,255,255,.92);
+  box-shadow: 0 12px 28px rgba(19,32,29,.1);
+}
+.live-announcement span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--mode-accent);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+.live-announcement p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .demo-name-input {
   width: 100%;
